@@ -1,0 +1,5 @@
+{
+  "name": "LAB ADVICE",
+  "description": "Un dashboard interactivo para visualizar y analizar datos de materias primas de la industria pecuaria, con gráficos de tendencias e histogramas. Sube tus datos desde archivos CSV o Excel para empezar.",
+  "requestFramePermissions": []
+}
