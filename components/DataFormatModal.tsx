@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { NUTRIENTS } from '../constants';
 import { XIcon } from './icons/XIcon';
@@ -41,7 +42,7 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                     <ul className="list-disc list-inside text-sm space-y-1">
                         <li>Las columnas <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">date</code> y <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">material</code> son <span className="font-bold">obligatorias</span>.</li>
                          <li>Las columnas <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">subtipo</code>, <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">Cliente</code>, <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">Proveedor</code>, y <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">Origen</code> son <span className="font-bold">opcionales</span>.</li>
-                        <li>El formato de fecha requerido es <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">dd-mm-yyyy</code> (ej. <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">26-10-2023</code>). También se acepta <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">dd/mm/yyyy</code>.</li>
+                        <li>El formato de fecha debe ser <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">dd/mm/yyyy</code>. Se aceptan barras (<code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">/</code>) o guiones (<code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">-</code>) como separadores. También se leen correctamente los números de serie de fecha de Excel.</li>
                         <li>Los nombres de las columnas (cabeceras) no distinguen entre mayúsculas y minúsculas (ej. <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">cliente</code> es igual que <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">Cliente</code>).</li>
                         <li>Los nombres de las columnas de nutrientes deben coincidir con los "keys" de la tabla de abajo (ej. <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">proteina</code>, <code className="bg-gray-200 text-gray-800 p-1 rounded text-xs">humedad</code>).</li>
                         <li>Solo necesitas incluir las columnas de los nutrientes que deseas analizar.</li>
@@ -67,7 +68,7 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-300">
                             <tr>
-                                <td className="px-4 py-2 whitespace-nowrap">26-10-2023</td>
+                                <td className="px-4 py-2 whitespace-nowrap">26/10/2023</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Soya</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Harina</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Cliente A</td>
@@ -80,7 +81,7 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                                 <td className="px-4 py-2 whitespace-nowrap">...</td>
                             </tr>
                             <tr>
-                                <td className="px-4 py-2 whitespace-nowrap">26-10-2023</td>
+                                <td className="px-4 py-2 whitespace-nowrap">26/10/2023</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Maiz</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Grano Entero</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Cliente B</td>

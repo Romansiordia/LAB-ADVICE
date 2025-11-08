@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Sidebar } from './components/Sidebar';
@@ -12,7 +13,6 @@ import { NUTRIENTS } from './constants';
 import { SAMPLE_DATA } from './sample-data';
 import { SummaryStats } from './components/SummaryStats';
 import { AverageNutrientChart } from './components/AverageNutrientChart';
-import { CalculatorIcon } from './components/icons/CalculatorIcon';
 import { AiAnalysisModal } from './components/AiAnalysisModal';
 import { SparklesIcon } from './components/icons/SparklesIcon';
 
@@ -22,34 +22,48 @@ declare const XLSX: any;
 
 const ALL_FILTER = 'Todos';
 
+const excelSerialDateToJSDate = (serial: number): Date => {
+    // Excel's epoch starts on 1900-01-01, but it incorrectly assumes 1900 was a leap year.
+    // JS's epoch is 1970-01-01. The difference is 25569 days.
+    const utc_days = Math.floor(serial - 25569);
+    const utc_value = utc_days * 86400; // 86400 seconds in a day
+    const date_info = new Date(utc_value * 1000);
+
+    return new Date(date_info.getUTCFullYear(), date_info.getUTCMonth(), date_info.getUTCDate());
+};
+
+
 const parseDateDDMMYYYY = (dateInput: any): Date | null => {
     if (dateInput === null || dateInput === undefined) return null;
+
+    // Handle Excel serial dates (which are numbers)
+    if (typeof dateInput === 'number' && dateInput > 1) {
+        return excelSerialDateToJSDate(dateInput);
+    }
     
     const dateStr = String(dateInput).trim();
     if (dateStr === '') return null;
 
-    const parts = dateStr.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+    // Handle string dates like 'dd/mm/yyyy' or 'dd-mm-yyyy'
+    const parts = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (parts) {
         const day = parseInt(parts[1], 10);
-        const month = parseInt(parts[2], 10) - 1;
+        const month = parseInt(parts[2], 10) - 1; // Month is 0-indexed in JS
         const year = parseInt(parts[3], 10);
-
+        
+        // Basic validation for sanity
         if (year < 1000 || year > 3000 || month < 0 || month > 11 || day < 1 || day > 31) {
             return null;
         }
-
+        
         const date = new Date(Date.UTC(year, month, day));
         
+        // Final check if the date is valid (e.g., avoids Feb 30th)
         if (date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
             return date;
         }
     }
     
-    const d = new Date(dateStr);
-    if (!isNaN(d.getTime())) {
-        return d;
-    }
-
     return null;
 };
 
@@ -77,6 +91,8 @@ const App: React.FC = () => {
     const [selectedCliente, setSelectedCliente] = useState<string>(ALL_FILTER);
     const [selectedProveedor, setSelectedProveedor] = useState<string>(ALL_FILTER);
     const [selectedOrigen, setSelectedOrigen] = useState<string>(ALL_FILTER);
+    const [startDate, setStartDate] = useState<string | null>(null);
+    const [endDate, setEndDate] = useState<string | null>(null);
 
     useEffect(() => {
         setSelectedSubtipo(ALL_FILTER);
@@ -143,7 +159,7 @@ const App: React.FC = () => {
                     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
                 if(formattedData.length === 0) {
-                     throw new Error('No se encontraron datos válidos en el archivo. Asegúrate de que las columnas "date" (con formato dd-mm-yyyy) y "material" existan.');
+                     throw new Error('No se encontraron datos válidos en el archivo. Asegúrate de que las columnas "date" y "material" existan y que las fechas tengan un formato reconocible (ej. dd/mm/yyyy).');
                 }
                 
                 setRawData(formattedData);
@@ -154,6 +170,8 @@ const App: React.FC = () => {
                 setSelectedCliente(ALL_FILTER);
                 setSelectedProveedor(ALL_FILTER);
                 setSelectedOrigen(ALL_FILTER);
+                setStartDate(null);
+                setEndDate(null);
 
 
             } catch (e: any) {
@@ -172,16 +190,19 @@ const App: React.FC = () => {
 
     const filteredData = useMemo(() => {
         return rawData
-        .filter(d => 
-            d.material === selectedMaterial && 
-            d[selectedNutrient] !== undefined &&
-            (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
-            (selectedCliente === ALL_FILTER || d.Cliente === selectedCliente) &&
-            (selectedProveedor === ALL_FILTER || d.Proveedor === selectedProveedor) &&
-            (selectedOrigen === ALL_FILTER || d.Origen === selectedOrigen)
-        )
+        .filter(d => {
+            const itemDateStr = d.date.substring(0, 10); // YYYY-MM-DD format
+            return d.material === selectedMaterial && 
+                d[selectedNutrient] !== undefined &&
+                (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
+                (selectedCliente === ALL_FILTER || d.Cliente === selectedCliente) &&
+                (selectedProveedor === ALL_FILTER || d.Proveedor === selectedProveedor) &&
+                (selectedOrigen === ALL_FILTER || d.Origen === selectedOrigen) &&
+                (!startDate || itemDateStr >= startDate) &&
+                (!endDate || itemDateStr <= endDate)
+        })
         .map(d => ({...d, value: d[selectedNutrient] as number}));
-    }, [rawData, selectedMaterial, selectedNutrient, selectedSubtipo, selectedCliente, selectedProveedor, selectedOrigen]);
+    }, [rawData, selectedMaterial, selectedNutrient, selectedSubtipo, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
     
     const availableMaterials = useMemo(() => {
         const materials = new Set(rawData.map(d => d.material));
@@ -355,6 +376,11 @@ const App: React.FC = () => {
                 selectedOrigen={selectedOrigen}
                 setSelectedOrigen={setSelectedOrigen}
                 availableOrigenes={availableOrigenes}
+
+                startDate={startDate}
+                setStartDate={setStartDate}
+                endDate={endDate}
+                setEndDate={setEndDate}
             />
 
             <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
@@ -375,21 +401,26 @@ const App: React.FC = () => {
                 ) : (
                     <>
                         <header className="mb-6">
-                           <div className="flex flex-wrap items-center justify-between gap-4">
-                                <div>
-                                    <h1 className="text-3xl font-bold text-gray-900">Dashboard de Materia Prima: <span className="text-cyan-600">{selectedMaterial}</span></h1>
+                           <div className="grid md:grid-cols-3 items-center gap-y-4 gap-x-2">
+                                <div className="md:col-start-2 text-center">
+                                    <h1 className="text-3xl font-bold text-gray-900">LAB ADVICE: <span className="text-cyan-600">{selectedMaterial}</span></h1>
                                     <p className="text-gray-500 mt-1">Análisis de <span className='font-semibold text-gray-700'>{nutrientLabel}</span></p>
                                 </div>
-                                <button 
-                                    onClick={handleAiAnalysis}
-                                    className="flex items-center bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                    disabled={filteredData.length === 0 || isLoading}
-                                >
-                                    <SparklesIcon />
-                                    <span className="ml-2">Analizar con IA</span>
-                                </button>
+                                <div className="justify-self-center md:col-start-3 md:justify-self-end">
+                                    <button 
+                                        onClick={handleAiAnalysis}
+                                        className="flex items-center bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                        disabled={filteredData.length === 0 || isLoading}
+                                    >
+                                        <SparklesIcon />
+                                        <span className="ml-2">Analizar con IA</span>
+                                    </button>
+                                </div>
                             </div>
                         </header>
+                        
+                        <SummaryStats stats={stats} nutrientLabel={nutrientLabel} />
+
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                             <ChartCard title="Tendencia a lo Largo del Tiempo" icon={<TrendingUpIcon />}>
                                 <TrendChart data={filteredData} nutrient={nutrientLabel} />
@@ -398,19 +429,10 @@ const App: React.FC = () => {
                                 <HistogramChart data={filteredData} nutrient={nutrientLabel} />
                             </ChartCard>
                         </div>
-                        <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <div className="mt-6">
                              <ChartCard title={`Promedio de Nutrientes para ${selectedMaterial}`} icon={<ChartBarIcon />}>
                                 <AverageNutrientChart data={averageNutrientData} />
                             </ChartCard>
-                            <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-lg flex flex-col">
-                                <h3 className="text-lg font-semibold text-gray-700 mb-4 flex items-center">
-                                    <CalculatorIcon />
-                                    <span className="ml-2">Resumen Estadístico ({nutrientLabel})</span>
-                                </h3>
-                                <div className="flex-grow">
-                                    <SummaryStats stats={stats} />
-                                </div>
-                            </div>
                         </div>
                     </>
                 )}
