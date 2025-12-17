@@ -1,4 +1,3 @@
-
 import React from 'react';
 
 interface ChartCardProps {
@@ -9,8 +8,8 @@ interface ChartCardProps {
 
 export const ChartCard: React.FC<ChartCardProps> = ({ title, icon, children }) => {
     return (
-        <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-lg">
-            <div className="flex items-center text-gray-700 mb-4">
+        <div className="bg-white border-2 border-slate-200 p-4 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300">
+            <div className="flex items-center text-slate-700 mb-4">
                 <span className="mr-2">{icon}</span>
                 <h3 className="text-lg font-semibold">{title}</h3>
             </div>

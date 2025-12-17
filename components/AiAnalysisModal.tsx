@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { XIcon } from './icons/XIcon';
 import { SparklesIcon } from './icons/SparklesIcon';
+import { DownloadIcon } from './icons/DownloadIcon';
 
 declare const marked: any;
 
@@ -10,9 +11,11 @@ interface AiAnalysisModalProps {
     isLoading: boolean;
     result: string | null;
     error: string | null;
+    material: string;
+    nutrient: string;
 }
 
-export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClose, isLoading, result, error }) => {
+export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClose, isLoading, result, error, material, nutrient }) => {
     const contentRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -20,6 +23,32 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
             contentRef.current.innerHTML = marked.parse(result);
         }
     }, [result]);
+
+    const handleDownload = () => {
+        if (!result) return;
+    
+        const sanitizeFilename = (name: string) => name.replace(/[^a-z0-9_ -]/gi, '_').replace(/\s+/g, '_').toLowerCase();
+        
+        const filename = `reporte_ia_${sanitizeFilename(material)}_${sanitizeFilename(nutrient)}.txt`;
+        
+        // Basic conversion from Markdown to plain text
+        const plainTextResult = result
+            .replace(/###\s/g, '')
+            .replace(/##\s/g, '')
+            .replace(/#\s/g, '')
+            .replace(/\*\*(.*?)\*\*/g, '$1') // bold
+            .replace(/\*/g, '  -'); // list items
+
+        const blob = new Blob([plainTextResult], { type: 'text/plain;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    };
 
     if (!isOpen) return null;
 
@@ -31,18 +60,18 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
             aria-modal="true"
         >
             <div
-                className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-2xl w-full text-gray-700 relative transform transition-all flex flex-col"
+                className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-2xl w-full text-slate-700 relative transform transition-all flex flex-col"
                 onClick={(e) => e.stopPropagation()}
                 style={{ maxHeight: '80vh' }}
             >
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
                     aria-label="Cerrar modal"
                 >
                     <XIcon />
                 </button>
-                <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center">
+                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center">
                     <SparklesIcon />
                     <span className="ml-2">Análisis con IA</span>
                 </h2>
@@ -54,8 +83,8 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <p className="text-gray-600">Generando interpretación de los datos...</p>
-                            <p className="text-sm text-gray-400 mt-1">Esto puede tardar unos segundos.</p>
+                            <p className="text-slate-600">Generando interpretación de los datos...</p>
+                            <p className="text-sm text-slate-400 mt-1">Esto puede tardar unos segundos.</p>
                         </div>
                     )}
                     {error && (
@@ -65,14 +94,23 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
                         </div>
                     )}
                     {!isLoading && result && (
-                         <div ref={contentRef} className="prose prose-sm max-w-none text-gray-800"></div>
+                         <div ref={contentRef} className="prose prose-sm max-w-none text-slate-800"></div>
                     )}
                 </div>
 
-                <div className="mt-6 text-right border-t pt-4">
+                <div className="mt-6 flex justify-end items-center border-t border-slate-200 pt-4 space-x-3">
+                    {result && !isLoading && (
+                        <button
+                            onClick={handleDownload}
+                            className="flex items-center bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                        >
+                            <DownloadIcon />
+                            <span className="ml-2">Descargar Reporte</span>
+                        </button>
+                    )}
                     <button
                         onClick={onClose}
-                        className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded transition-colors"
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-4 rounded transition-colors"
                     >
                         Cerrar
                     </button>

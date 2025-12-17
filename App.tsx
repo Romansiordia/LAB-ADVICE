@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Sidebar } from './components/Sidebar';
-import { TrendChart } from './components/TrendChart';
+import { MultiTrendChart } from './components/MultiTrendChart';
 import { HistogramChart } from './components/HistogramChart';
 import { ChartCard } from './components/ChartCard';
 import { TrendingUpIcon } from './components/icons/TrendingUpIcon';
@@ -11,16 +11,22 @@ import { DataFormatModal } from './components/DataFormatModal';
 import { RawMaterialData } from './types';
 import { NUTRIENTS } from './constants';
 import { SAMPLE_DATA } from './sample-data';
-import { SummaryStats } from './components/SummaryStats';
-import { AverageNutrientChart } from './components/AverageNutrientChart';
 import { AiAnalysisModal } from './components/AiAnalysisModal';
 import { SparklesIcon } from './components/icons/SparklesIcon';
+import { MonthlyTrendChart } from './components/MonthlyTrendChart';
+import { CalendarIcon } from './components/icons/CalendarIcon';
+import { Logo } from './components/Logo';
+import { ParameterHistograms } from './components/ParameterHistograms';
+import { ParameterMonthlyTrends } from './components/ParameterMonthlyTrends';
+import { NutrientStatsTable } from './components/NutrientStatsTable';
+import { TableIcon } from './components/icons/TableIcon';
 
 
 declare const Papa: any;
 declare const XLSX: any;
 
 const ALL_FILTER = 'Todos';
+type ViewMode = 'general' | 'histograms' | 'monthly_trends' | 'statistics';
 
 const excelSerialDateToJSDate = (serial: number): Date => {
     // Excel's epoch starts on 1900-01-01, but it incorrectly assumes 1900 was a leap year.
@@ -81,26 +87,21 @@ const App: React.FC = () => {
     const [aiError, setAiError] = useState<string | null>(null);
 
     const firstSampleMaterial = SAMPLE_DATA.length > 0 ? SAMPLE_DATA[0].material : '';
-    const firstSampleNutrient = SAMPLE_DATA.length > 0 
-        ? (NUTRIENTS.find(n => SAMPLE_DATA[0][n.key] !== undefined)?.key || NUTRIENTS[0].key) 
-        : NUTRIENTS[0].key;
 
     const [selectedMaterial, setSelectedMaterial] = useState<string>(firstSampleMaterial);
-    const [selectedNutrient, setSelectedNutrient] = useState<string>(firstSampleNutrient);
+    
+    // View Mode State
+    const [currentView, setCurrentView] = useState<ViewMode>('general');
+    
+    // State for Multi-Chart
+    const [comparisonNutrients, setComparisonNutrients] = useState<string[]>(['proteina', 'humedad', 'grasa']);
+
     const [selectedSubtipo, setSelectedSubtipo] = useState<string>(ALL_FILTER);
     const [selectedCliente, setSelectedCliente] = useState<string>(ALL_FILTER);
     const [selectedProveedor, setSelectedProveedor] = useState<string>(ALL_FILTER);
     const [selectedOrigen, setSelectedOrigen] = useState<string>(ALL_FILTER);
     const [startDate, setStartDate] = useState<string | null>(null);
     const [endDate, setEndDate] = useState<string | null>(null);
-
-    useEffect(() => {
-        setSelectedSubtipo(ALL_FILTER);
-        setSelectedCliente(ALL_FILTER);
-        setSelectedProveedor(ALL_FILTER);
-        setSelectedOrigen(ALL_FILTER);
-    }, [selectedMaterial]);
-
     
     const handleFileParse = (file: File) => {
         setIsLoading(true);
@@ -164,8 +165,6 @@ const App: React.FC = () => {
                 
                 setRawData(formattedData);
                 setSelectedMaterial(formattedData[0].material);
-                const firstAvailableNutrient = NUTRIENTS.find(n => formattedData[0][n.key] !== undefined)?.key || NUTRIENTS[0].key;
-                setSelectedNutrient(firstAvailableNutrient);
                 setSelectedSubtipo(ALL_FILTER);
                 setSelectedCliente(ALL_FILTER);
                 setSelectedProveedor(ALL_FILTER);
@@ -188,22 +187,21 @@ const App: React.FC = () => {
         }
     };
 
-    const filteredData = useMemo(() => {
+    // Filter used for the multi-nutrient chart and Histograms (preserves all keys)
+    const multiTrendData = useMemo(() => {
         return rawData
         .filter(d => {
-            const itemDateStr = d.date.substring(0, 10); // YYYY-MM-DD format
+            const itemDateStr = d.date.substring(0, 10);
             return d.material === selectedMaterial && 
-                d[selectedNutrient] !== undefined &&
                 (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
                 (selectedCliente === ALL_FILTER || d.Cliente === selectedCliente) &&
                 (selectedProveedor === ALL_FILTER || d.Proveedor === selectedProveedor) &&
                 (selectedOrigen === ALL_FILTER || d.Origen === selectedOrigen) &&
                 (!startDate || itemDateStr >= startDate) &&
                 (!endDate || itemDateStr <= endDate)
-        })
-        .map(d => ({...d, value: d[selectedNutrient] as number}));
-    }, [rawData, selectedMaterial, selectedNutrient, selectedSubtipo, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
-    
+        });
+    }, [rawData, selectedMaterial, selectedSubtipo, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
+
     const availableMaterials = useMemo(() => {
         const materials = new Set(rawData.map(d => d.material));
         return [...materials];
@@ -218,29 +216,6 @@ const App: React.FC = () => {
         return [];
     }, [rawData, selectedMaterial]);
     
-    const averageNutrientData = useMemo(() => {
-        if (!selectedMaterial) return [];
-        const materialData = rawData.filter(d => d.material === selectedMaterial);
-        if (materialData.length === 0) return [];
-
-        return availableNutrients.map(nutrient => {
-            const values = materialData
-                .map(d => d[nutrient.key])
-                .filter((v): v is number => typeof v === 'number' && !isNaN(v));
-            
-            if (values.length === 0) {
-                return { name: nutrient.label.replace(' (%)', ''), value: 0 };
-            }
-
-            const sum = values.reduce((acc, v) => acc + v, 0);
-            return {
-                name: nutrient.label.replace(' (%)', ''),
-                value: parseFloat((sum / values.length).toFixed(2))
-            };
-        }).filter(item => item.value > 0);
-
-    }, [rawData, selectedMaterial, availableNutrients]);
-
     const createFilterOptions = (key: keyof RawMaterialData) => useMemo(() => {
         const values = new Set(
             rawData
@@ -255,35 +230,8 @@ const App: React.FC = () => {
     const availableProveedores = createFilterOptions('Proveedor');
     const availableOrigenes = createFilterOptions('Origen');
     
-    const stats = useMemo(() => {
-        if (!filteredData || filteredData.length === 0) {
-            return null;
-        }
-
-        const values = filteredData.map(d => d.value);
-        const count = values.length;
-        const sum = values.reduce((acc, val) => acc + val, 0);
-        const mean = sum / count;
-        const min = Math.min(...values);
-        const max = Math.max(...values);
-
-        const squaredDiffs = values.map(val => (val - mean) ** 2);
-        const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / (count > 1 ? count - 1 : 1);
-        const stdDev = Math.sqrt(variance);
-
-        return {
-            count,
-            mean: mean.toFixed(2),
-            min: min.toFixed(2),
-            max: max.toFixed(2),
-            stdDev: stdDev.toFixed(2),
-        };
-    }, [filteredData]);
-
-    const nutrientLabel = NUTRIENTS.find(n => n.key === selectedNutrient)?.label || selectedNutrient;
-    
     const handleAiAnalysis = async () => {
-        if (!stats) {
+        if (multiTrendData.length === 0) {
             setAiError("No hay suficientes datos para realizar un análisis.");
             setIsAiModalOpen(true);
             return;
@@ -296,9 +244,7 @@ const App: React.FC = () => {
 
         const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
         
-        const dateRange = filteredData.length > 0
-            ? `${new Date(filteredData[0].date).toLocaleDateString('es-ES')} a ${new Date(filteredData[filteredData.length - 1].date).toLocaleDateString('es-ES')}`
-            : 'N/A';
+        const dateRange = `${new Date(multiTrendData[0].date).toLocaleDateString('es-ES')} a ${new Date(multiTrendData[multiTrendData.length - 1].date).toLocaleDateString('es-ES')}`;
             
         const activeFilters: string[] = [];
         if (selectedSubtipo !== ALL_FILTER) activeFilters.push(`Subtipo: ${selectedSubtipo}`);
@@ -307,27 +253,41 @@ const App: React.FC = () => {
         if (selectedOrigen !== ALL_FILTER) activeFilters.push(`Origen: ${selectedOrigen}`);
         const filtersString = activeFilters.length > 0 ? activeFilters.join(', ') : 'Ninguno';
 
+        // Calculate stats for all nutrients dynamically
+        const nutrientStats = availableNutrients.map(n => {
+             const values = multiTrendData.map(d => d[n.key] as number).filter(v => typeof v === 'number' && !isNaN(v));
+             if (values.length === 0) return null;
+             
+             const count = values.length;
+             const sum = values.reduce((acc, val) => acc + val, 0);
+             const mean = sum / count;
+             const min = Math.min(...values);
+             const max = Math.max(...values);
+             const squaredDiffs = values.map(val => (val - mean) ** 2);
+             const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / (count > 1 ? count - 1 : 1);
+             const stdDev = Math.sqrt(variance);
+             
+             return ` - **${n.label}**: Promedio ${mean.toFixed(2)}, DE ${stdDev.toFixed(2)}, Mín ${min.toFixed(2)}, Máx ${max.toFixed(2)} (${count} muestras)`;
+        }).filter(Boolean).join('\n');
+
         const prompt = `
-            Actúa como un experto en nutrición animal y análisis de materias primas para la industria pecuaria. 
-            Basado en los siguientes datos para la materia prima '${selectedMaterial}' y el nutriente '${nutrientLabel}', 
-            proporciona una breve interpretación profesional de los resultados en formato Markdown.
+            Actúa como un nutricionista animal senior, especialista en formulación de piensos y control de calidad de materias primas para la industria pecuaria.
+            Basado en los siguientes datos consolidados para la materia prima '${selectedMaterial}', proporciona un análisis exhaustivo y profesional sobre la calidad general del ingrediente en formato Markdown.
 
-            **Datos Clave:**
+            **Resumen del Contexto:**
             - **Rango de Fechas:** ${dateRange}
-            - **Número de Muestras:** ${stats.count}
-            - **Promedio:** ${stats.mean}
-            - **Mínimo:** ${stats.min}
-            - **Máximo:** ${stats.max}
-            - **Desviación Estándar:** ${stats.stdDev}
             - **Filtros Aplicados:** ${filtersString}
+            
+            **Estadísticas Generales por Nutriente:**
+            ${nutrientStats}
 
-            **Tu análisis debe incluir:**
-            1.  **Interpretación General:** Comenta sobre la consistencia y estabilidad del nutriente en la materia prima, usando la desviación estándar como indicador principal. Una desviación estándar baja sugiere consistencia.
-            2.  **Rango de Valores:** Evalúa el rango entre el valor mínimo y máximo. ¿Es muy amplio? ¿Qué podría significar esta variabilidad?
-            3.  **Implicaciones Prácticas:** Discute las posibles consecuencias de estos resultados para un nutricionista al formular dietas. Por ejemplo, ¿la variabilidad requiere un margen de seguridad mayor? ¿El promedio es adecuado?
-            4.  **Conclusión y Recomendación:** Ofrece una conclusión concisa y, si es posible, una recomendación simple, como "la materia prima parece estable" o "se recomienda monitorear la variabilidad de este proveedor".
+            **Tu análisis debe cubrir los siguientes puntos:**
+            1.  **Evaluación de Calidad General:** Basado en los promedios y desviaciones estándar, califica la calidad general de esta materia prima. ¿Cumple con lo esperado para un ingrediente de su tipo?
+            2.  **Identificación de Puntos Críticos:** Señala si algún nutriente específico muestra una variabilidad preocupante (Alta DE) o valores fuera de lo común (Mínimos/Máximos extremos).
+            3.  **Impacto en Formulación:** ¿Cómo afectan estos resultados a la formulación de raciones? Menciona si se deben ajustar matrices nutricionales o aplicar márgenes de seguridad específicos para ciertos nutrientes.
+            4.  **Recomendaciones:** Ofrece consejos prácticos (ej. aumentar muestreo de ciertos parámetros, contactar al proveedor, etc.).
 
-            Utiliza encabezados en negrita para cada sección y listas para los puntos. Sé claro y directo en tu explicación.
+            Utiliza un lenguaje técnico pero claro. Estructura tu respuesta con encabezados en negrita y listas para facilitar la lectura.
         `;
 
         try {
@@ -344,17 +304,21 @@ const App: React.FC = () => {
         }
     };
 
+    const toggleComparisonNutrient = (key: string) => {
+        setComparisonNutrients(prev => 
+            prev.includes(key) 
+                ? prev.filter(k => k !== key) 
+                : [...prev, key]
+        );
+    };
 
     return (
-        <div className="min-h-screen bg-gray-50 text-gray-900 flex flex-col md:flex-row">
+        <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col md:flex-row">
             <Sidebar
                 onFileParse={handleFileParse}
                 selectedMaterial={selectedMaterial}
                 setSelectedMaterial={setSelectedMaterial}
-                selectedNutrient={selectedNutrient}
-                setSelectedNutrient={setSelectedNutrient}
                 materials={availableMaterials}
-                nutrients={availableNutrients}
                 isLoading={isLoading}
                 error={error}
                 hasData={rawData.length > 0}
@@ -393,9 +357,9 @@ const App: React.FC = () => {
                     </div>
                 ) : rawData.length === 0 ? (
                     <div className="flex items-center justify-center h-full">
-                        <div className="text-center p-8 bg-white border border-gray-200 rounded-lg">
-                            <h2 className="text-2xl font-bold text-gray-900 mb-2">No Hay Datos Para Mostrar</h2>
-                            <p className="text-gray-500">{error ? error : 'Sube un archivo para visualizar tus datos.'}</p>
+                        <div className="text-center p-8 bg-white border border-slate-200 rounded-lg">
+                            <h2 className="text-2xl font-bold text-slate-900 mb-2">No Hay Datos Para Mostrar</h2>
+                            <p className="text-slate-500">{error ? error : 'Sube un archivo para visualizar tus datos.'}</p>
                         </div>
                     </div>
                 ) : (
@@ -403,14 +367,16 @@ const App: React.FC = () => {
                         <header className="mb-6">
                            <div className="grid md:grid-cols-3 items-center gap-y-4 gap-x-2">
                                 <div className="md:col-start-2 text-center">
-                                    <h1 className="text-3xl font-bold text-gray-900">LAB ADVICE: <span className="text-cyan-600">{selectedMaterial}</span></h1>
-                                    <p className="text-gray-500 mt-1">Análisis de <span className='font-semibold text-gray-700'>{nutrientLabel}</span></p>
+                                    <div className="flex justify-center">
+                                        <Logo as="h1" showMaterial={selectedMaterial} />
+                                    </div>
+                                    <p className="text-slate-500 mt-1">Análisis de <span className='font-semibold text-slate-700'>{selectedMaterial}</span></p>
                                 </div>
                                 <div className="justify-self-center md:col-start-3 md:justify-self-end">
                                     <button 
                                         onClick={handleAiAnalysis}
                                         className="flex items-center bg-cyan-600 text-white font-semibold py-2 px-4 rounded-lg shadow-md hover:bg-cyan-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                                        disabled={filteredData.length === 0 || isLoading}
+                                        disabled={multiTrendData.length === 0 || isLoading}
                                     >
                                         <SparklesIcon />
                                         <span className="ml-2">Analizar con IA</span>
@@ -418,22 +384,108 @@ const App: React.FC = () => {
                                 </div>
                             </div>
                         </header>
-                        
-                        <SummaryStats stats={stats} nutrientLabel={nutrientLabel} />
 
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <ChartCard title="Tendencia a lo Largo del Tiempo" icon={<TrendingUpIcon />}>
-                                <TrendChart data={filteredData} nutrient={nutrientLabel} />
-                            </ChartCard>
-                            <ChartCard title="Distribución de Frecuencia" icon={<ChartBarIcon />}>
-                                <HistogramChart data={filteredData} nutrient={nutrientLabel} />
-                            </ChartCard>
+                        {/* Navigation Tabs */}
+                        <div className="flex justify-center mb-6">
+                            <div className="bg-white p-1 rounded-lg shadow-sm border border-slate-200 flex space-x-1 overflow-x-auto max-w-full">
+                                <button
+                                    onClick={() => setCurrentView('general')}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                                        currentView === 'general'
+                                            ? 'bg-cyan-100 text-cyan-800'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    Resumen General
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('histograms')}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                                        currentView === 'histograms'
+                                            ? 'bg-cyan-100 text-cyan-800'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    Histogramas por Parámetro
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('monthly_trends')}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                                        currentView === 'monthly_trends'
+                                            ? 'bg-cyan-100 text-cyan-800'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    Tendencias Mensuales
+                                </button>
+                                <button
+                                    onClick={() => setCurrentView('statistics')}
+                                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors whitespace-nowrap ${
+                                        currentView === 'statistics'
+                                            ? 'bg-cyan-100 text-cyan-800'
+                                            : 'text-slate-600 hover:bg-slate-50'
+                                    }`}
+                                >
+                                    Estadísticas Detalladas
+                                </button>
+                            </div>
                         </div>
-                        <div className="mt-6">
-                             <ChartCard title={`Promedio de Nutrientes para ${selectedMaterial}`} icon={<ChartBarIcon />}>
-                                <AverageNutrientChart data={averageNutrientData} />
-                            </ChartCard>
-                        </div>
+                        
+                        {currentView === 'general' && (
+                            <>
+                                <div className="mb-6">
+                                    <ChartCard title="Comparativa de Tendencias Multi-Nutriente" icon={<TrendingUpIcon />}>
+                                        <div className="flex flex-col h-full">
+                                            <div className="flex flex-wrap gap-2 mb-4 max-h-24 overflow-y-auto p-1">
+                                                {availableNutrients.map(n => {
+                                                    const isActive = comparisonNutrients.includes(n.key);
+                                                    return (
+                                                        <button
+                                                            key={n.key}
+                                                            onClick={() => toggleComparisonNutrient(n.key)}
+                                                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all border ${
+                                                                isActive 
+                                                                    ? 'bg-slate-800 text-white border-slate-800 shadow-sm' 
+                                                                    : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-50'
+                                                            }`}
+                                                            style={isActive ? { backgroundColor: n.color, borderColor: n.color } : {}}
+                                                        >
+                                                            {n.label.replace(' (%)', '')}
+                                                        </button>
+                                                    )
+                                                })}
+                                            </div>
+                                            <div className="flex-1 min-h-0">
+                                                <MultiTrendChart data={multiTrendData} activeNutrients={comparisonNutrients} />
+                                            </div>
+                                        </div>
+                                    </ChartCard>
+                                </div>
+                            </>
+                        )}
+                        
+                        {currentView === 'histograms' && (
+                            <div className="animate-fade-in">
+                                <h2 className="text-xl font-semibold text-slate-800 mb-4 px-1">Histogramas de Calidad por Parámetro</h2>
+                                <ParameterHistograms data={multiTrendData} />
+                            </div>
+                        )}
+
+                        {currentView === 'monthly_trends' && (
+                             <div className="animate-fade-in">
+                                <h2 className="text-xl font-semibold text-slate-800 mb-4 px-1">Tendencias Mensuales por Parámetro</h2>
+                                <ParameterMonthlyTrends data={multiTrendData} />
+                            </div>
+                        )}
+                        
+                        {currentView === 'statistics' && (
+                            <div className="animate-fade-in h-[calc(100vh-250px)] min-h-[500px]">
+                                <h2 className="text-xl font-semibold text-slate-800 mb-4 px-1">Estadísticas Detalladas</h2>
+                                <ChartCard title={`Estadísticas Detalladas para ${selectedMaterial}`} icon={<TableIcon />}>
+                                     <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
+                                </ChartCard>
+                            </div>
+                        )}
                     </>
                 )}
             </main>
@@ -444,6 +496,8 @@ const App: React.FC = () => {
                 isLoading={isAiLoading}
                 result={aiAnalysisResult}
                 error={aiError}
+                material={selectedMaterial}
+                nutrient="General"
             />
         </div>
     );

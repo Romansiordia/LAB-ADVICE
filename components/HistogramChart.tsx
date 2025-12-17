@@ -1,3 +1,4 @@
+
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { HistogramBin } from '../types';
@@ -5,6 +6,7 @@ import { HistogramBin } from '../types';
 interface HistogramChartProps {
     data: { date: string, value: number }[];
     nutrient: string;
+    color?: string;
 }
 
 const createHistogramData = (data: { value: number }[], numBins = 10): HistogramBin[] => {
@@ -43,12 +45,12 @@ const createHistogramData = (data: { value: number }[], numBins = 10): Histogram
 };
 
 
-export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient }) => {
+export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, color }) => {
 
     const histogramData = useMemo(() => createHistogramData(data), [data]);
 
     if (!data || data.length === 0) {
-        return <div className="flex items-center justify-center h-full text-gray-500">No hay datos disponibles para esta selección.</div>;
+        return <div className="flex items-center justify-center h-full text-slate-500">No hay datos disponibles para esta selección.</div>;
     }
     
     return (
@@ -62,19 +64,20 @@ export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient }
                     bottom: 5,
                 }}
             >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis dataKey="range" stroke="#6b7280" fontSize={10} angle={-30} textAnchor="end" height={50} />
-                <YAxis allowDecimals={false} stroke="#6b7280" fontSize={12} />
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="range" stroke="#64748b" fontSize={10} angle={-30} textAnchor="end" height={50} />
+                <YAxis allowDecimals={false} stroke="#64748b" fontSize={12} />
                 <Tooltip 
                     contentStyle={{ 
                         backgroundColor: 'white', 
-                        border: '1px solid #e5e7eb',
+                        border: '1px solid #e2e8f0',
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' 
                     }} 
-                    labelStyle={{ color: '#374151' }}
+                    labelStyle={{ color: '#334155' }}
+                    cursor={{ fill: '#f1f5f9' }}
                 />
                 <Legend />
-                <Bar dataKey="count" name="Frecuencia" fill="#06b6d4" />
+                <Bar dataKey="count" name="Frecuencia" fill={color || "#10b981"} radius={[4, 4, 0, 0]} />
             </BarChart>
         </ResponsiveContainer>
     );

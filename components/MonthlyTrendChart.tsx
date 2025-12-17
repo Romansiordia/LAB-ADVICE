@@ -1,18 +1,19 @@
-import React from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
-interface TrendChartProps {
+import React from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush } from 'recharts';
+
+interface MonthlyTrendChartProps {
     data: { date: string, value: number }[];
     nutrient: string;
 }
 
-export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient }) => {
+export const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data, nutrient }) => {
     if (!data || data.length === 0) {
-        return <div className="flex items-center justify-center h-full text-slate-500">No hay datos disponibles para esta selección.</div>;
+        return <div className="flex items-center justify-center h-full text-slate-500">No hay datos suficientes para una tendencia mensual.</div>;
     }
 
     const formatDate = (tickItem: string) => {
-        return new Date(tickItem).toLocaleDateString('es-ES', { month: 'short', day: 'numeric' });
+        return new Date(tickItem).toLocaleDateString('es-ES', { year: '2-digit', month: 'short' });
     };
 
     return (
@@ -36,9 +37,17 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient }) => {
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
                     }} 
                     labelStyle={{ color: '#334155' }}
+                    formatter={(value: number) => [value.toFixed(2), 'Promedio Mensual']}
                 />
-                <Legend formatter={() => `Tendencia Diaria (${nutrient})`} />
-                <Line type="monotone" dataKey="value" name={nutrient} stroke="#06b6d4" strokeWidth={2} dot={{ r: 2 }} activeDot={{ r: 6 }} />
+                <Legend verticalAlign="top" height={36} formatter={() => `Promedio Mensual (${nutrient})`} />
+                <Brush 
+                    dataKey="date" 
+                    height={30} 
+                    stroke="#94a3b8" 
+                    fill="#f8fafc"
+                    tickFormatter={formatDate}
+                />
+                <Line type="monotone" dataKey="value" name={nutrient} stroke="#3b82f6" strokeWidth={2} dot={{ r: 3 }} activeDot={{ r: 7 }} />
             </LineChart>
         </ResponsiveContainer>
     );

@@ -1,6 +1,8 @@
+
 import React from 'react';
 import { FileUpload } from './FileUpload';
 import { InfoIcon } from './icons/InfoIcon';
+import { Logo } from './Logo';
 
 interface FilterSelectProps {
     id: string;
@@ -11,16 +13,14 @@ interface FilterSelectProps {
 }
 
 const FilterSelect: React.FC<FilterSelectProps> = ({ id, label, value, onChange, options }) => {
-    if (options.length <= 1) return null;
-
     return (
         <div>
-            <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-2">{label}</label>
+            <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-2">{label}</label>
             <select
                 id={id}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-gray-900"
+                className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-slate-900 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
             >
                 {options.map(option => (
                     <option key={option} value={option}>{option}</option>
@@ -35,10 +35,7 @@ interface SidebarProps {
     onFileParse: (file: File) => void;
     selectedMaterial: string;
     setSelectedMaterial: (material: string) => void;
-    selectedNutrient: string;
-    setSelectedNutrient: (nutrient: string) => void;
     materials: string[];
-    nutrients: { key: string; label: string; }[];
     isLoading: boolean;
     error: string | null;
     hasData: boolean;
@@ -71,10 +68,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onFileParse,
     selectedMaterial,
     setSelectedMaterial,
-    selectedNutrient,
-    setSelectedNutrient,
     materials,
-    nutrients,
     isLoading,
     error,
     hasData,
@@ -103,8 +97,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
 
     return (
-        <aside className="w-full md:w-80 bg-white p-6 flex-shrink-0 flex flex-col space-y-6 border-r border-gray-200">
-            <h2 className="text-2xl font-bold text-gray-900">Panel de Control</h2>
+        <aside className="w-full md:w-80 bg-white p-6 flex-shrink-0 flex flex-col space-y-6 border-r border-slate-200">
+            <Logo />
             
             {isSampleData && (
                 <div className="text-cyan-800 bg-cyan-100 p-3 rounded-md text-sm" role="alert">
@@ -135,25 +129,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         onChange={setSelectedMaterial}
                         options={materials}
                     />
-                    <div>
-                         <label htmlFor="nutrient-select" className="block text-sm font-medium text-gray-700 mb-2">Nutriente / Analito</label>
-                        <select
-                            id="nutrient-select"
-                            value={selectedNutrient}
-                            onChange={(e) => setSelectedNutrient(e.target.value)}
-                            className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-gray-900"
-                        >
-                            {nutrients.map(nutrient => (
-                                <option key={nutrient.key} value={nutrient.key}>{nutrient.label}</option>
-                            ))}
-                        </select>
-                    </div>
                     
-                    <hr className="border-gray-200" />
+                    <hr className="border-slate-200" />
 
                     <div>
                         <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-gray-700">Rango de Fechas</label>
+                            <label className="block text-sm font-medium text-slate-700">Rango de Fechas</label>
                             <button
                                 onClick={handleClearDates}
                                 className="text-xs text-cyan-600 hover:text-cyan-800 underline"
@@ -163,24 +144,24 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label htmlFor="start-date" className="block text-xs text-gray-500 mb-1">Inicio</label>
+                                <label htmlFor="start-date" className="block text-xs text-slate-500 mb-1">Inicio</label>
                                 <input
                                     type="date"
                                     id="start-date"
                                     value={startDate || ''}
                                     onChange={(e) => setStartDate(e.target.value || null)}
-                                    className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm pl-3 pr-2 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-gray-900"
+                                    className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm pl-3 pr-2 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-slate-900"
                                 />
                             </div>
                             <div>
-                                <label htmlFor="end-date" className="block text-xs text-gray-500 mb-1">Fin</label>
+                                <label htmlFor="end-date" className="block text-xs text-slate-500 mb-1">Fin</label>
                                 <input
                                     type="date"
                                     id="end-date"
                                     value={endDate || ''}
                                     onChange={(e) => setEndDate(e.target.value || null)}
                                     min={startDate || undefined}
-                                    className="w-full bg-gray-50 border border-gray-300 rounded-md shadow-sm pl-3 pr-2 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-gray-900"
+                                    className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm pl-3 pr-2 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-slate-900"
                                 />
                             </div>
                         </div>
