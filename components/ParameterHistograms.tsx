@@ -8,9 +8,10 @@ import { RawMaterialData } from '../types';
 
 interface ParameterHistogramsProps {
     data: RawMaterialData[];
+    onExpand?: (key: string) => void;
 }
 
-export const ParameterHistograms: React.FC<ParameterHistogramsProps> = ({ data }) => {
+export const ParameterHistograms: React.FC<ParameterHistogramsProps> = ({ data, onExpand }) => {
     if (!data || data.length === 0) {
         return <div className="text-center text-slate-500 py-10">No hay datos disponibles para generar histogramas.</div>;
     }
@@ -18,8 +19,6 @@ export const ParameterHistograms: React.FC<ParameterHistogramsProps> = ({ data }
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {NUTRIENTS.map((nutrient) => {
-                // Prepare data specific for this nutrient's histogram
-                // HistogramChart expects { date: string, value: number }[]
                 const chartData = data
                     .filter(d => {
                         const val = d[nutrient.key];
@@ -30,7 +29,6 @@ export const ParameterHistograms: React.FC<ParameterHistogramsProps> = ({ data }
                         value: Number(d[nutrient.key])
                     }));
 
-                // Skip rendering if no valid data for this nutrient
                 if (chartData.length === 0) return null;
 
                 return (
@@ -38,6 +36,7 @@ export const ParameterHistograms: React.FC<ParameterHistogramsProps> = ({ data }
                         key={nutrient.key} 
                         title={`Distribución: ${nutrient.label}`} 
                         icon={<ChartBarIcon />}
+                        onExpand={onExpand ? () => onExpand(nutrient.key) : undefined}
                     >
                         <HistogramChart 
                             data={chartData} 
