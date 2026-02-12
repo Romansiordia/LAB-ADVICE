@@ -22,6 +22,9 @@ import { ParameterMonthlyTrends, getMonthlyData } from './components/ParameterMo
 import { NutrientStatsTable } from './components/NutrientStatsTable';
 import { TableIcon } from './components/icons/TableIcon';
 import { ChartZoomModal } from './components/ChartZoomModal';
+import { ChevronRightIcon } from './components/icons/ChevronRightIcon';
+// Added missing ChevronLeftIcon import
+import { ChevronLeftIcon } from './components/icons/ChevronLeftIcon';
 
 
 declare const Papa: any;
@@ -79,6 +82,7 @@ const App: React.FC = () => {
     const [aiError, setAiError] = useState<string | null>(null);
 
     const [zoomConfig, setZoomConfig] = useState<ZoomConfig | null>(null);
+    const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
 
     const firstSampleMaterial = SAMPLE_DATA.length > 0 ? SAMPLE_DATA[0].material : '';
     const [selectedMaterial, setSelectedMaterial] = useState<string>(firstSampleMaterial);
@@ -216,7 +220,7 @@ const App: React.FC = () => {
     }, [zoomConfig, multiTrendData]);
 
     return (
-        <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col md:flex-row">
+        <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col md:flex-row overflow-hidden">
             <Sidebar
                 onFileParse={handleFileParse}
                 selectedMaterial={selectedMaterial}
@@ -243,18 +247,50 @@ const App: React.FC = () => {
                 setStartDate={setStartDate}
                 endDate={endDate}
                 setEndDate={setEndDate}
+                isCollapsed={isSidebarCollapsed}
+                onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
             />
 
-            <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto">
+            <main className="flex-1 p-4 md:p-6 lg:p-8 overflow-auto relative h-screen">
+                {isSidebarCollapsed && (
+                    <button 
+                        onClick={() => setIsSidebarCollapsed(false)}
+                        className="hidden md:flex absolute top-4 left-4 z-40 p-2 bg-white border border-slate-200 text-slate-400 hover:text-cyan-600 rounded-lg shadow-md transition-all hover:scale-105"
+                        title="Expandir menú"
+                    >
+                        <ChevronRightIcon />
+                    </button>
+                )}
+
+                {/* Mobile Toggle (Simple visible version) */}
+                {!isSidebarCollapsed && (
+                    <button 
+                        onClick={() => setIsSidebarCollapsed(true)}
+                        className="md:hidden mb-4 p-2 bg-white border border-slate-200 text-slate-400 rounded-lg flex items-center justify-center w-full shadow-sm"
+                    >
+                        <span className="text-sm font-semibold mr-2">Ocultar Filtros</span>
+                        <ChevronLeftIcon />
+                    </button>
+                )}
+                {isSidebarCollapsed && (
+                    <button 
+                        onClick={() => setIsSidebarCollapsed(false)}
+                        className="md:hidden mb-4 p-2 bg-white border border-slate-200 text-cyan-600 rounded-lg flex items-center justify-center w-full shadow-sm"
+                    >
+                        <span className="text-sm font-semibold mr-2">Mostrar Filtros</span>
+                        <ChevronRightIcon />
+                    </button>
+                )}
+
                 {isLoading && !isAiLoading ? (
                      <div className="flex items-center justify-center h-full">
                         <div className="animate-spin h-10 w-10 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
                     </div>
                 ) : rawData.length === 0 ? (
                     <div className="flex items-center justify-center h-full">
-                        <div className="text-center p-8 bg-white border border-slate-200 rounded-lg">
+                        <div className="text-center p-8 bg-white border border-slate-200 rounded-lg max-w-md w-full shadow-lg">
                             <h2 className="text-2xl font-bold text-slate-900 mb-2">No Hay Datos Para Mostrar</h2>
-                            <p className="text-slate-500">Sube un archivo para visualizar tus datos.</p>
+                            <p className="text-slate-500">Sube un archivo para visualizar tus datos y empezar el análisis pecuario.</p>
                         </div>
                     </div>
                 ) : (
@@ -281,10 +317,10 @@ const App: React.FC = () => {
                         <div className="flex justify-center mb-8">
                             <div className="bg-white p-1.5 rounded-xl shadow-sm border border-slate-200 flex space-x-1 overflow-x-auto max-w-full">
                                 {[
-                                    { id: 'general', label: 'Resumen de Tendencias' },
-                                    { id: 'histograms', label: 'Histogramas de Frecuencia' },
-                                    { id: 'monthly_trends', label: 'Tendencias Mensuales' },
-                                    { id: 'statistics', label: 'Estadísticas Detalladas' }
+                                    { id: 'general', label: 'Tendencias Diarias' },
+                                    { id: 'histograms', label: 'Distribuciones' },
+                                    { id: 'monthly_trends', label: 'Promedios Mensuales' },
+                                    { id: 'statistics', label: 'Ficha Técnica' }
                                 ].map((tab) => (
                                     <button
                                         key={tab.id}
@@ -301,68 +337,70 @@ const App: React.FC = () => {
                             </div>
                         </div>
                         
-                        {currentView === 'general' && (
-                            <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                                {availableNutrients.map((nutrient) => {
-                                    const chartData = multiTrendData
-                                        .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null)
-                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
-                                    if (chartData.length === 0) return null;
-                                    return (
-                                        <ChartCard 
-                                            key={nutrient.key} 
-                                            title={`Tendencia: ${nutrient.label}`} 
-                                            icon={<TrendingUpIcon />}
-                                            onExpand={() => setZoomConfig({ type: 'daily', key: nutrient.key })}
-                                        >
-                                            <TrendChart 
-                                                data={chartData} 
-                                                nutrient={nutrient.label} 
-                                                color={nutrient.color}
-                                            />
-                                        </ChartCard>
-                                    );
-                                })}
-                            </div>
-                        )}
-                        
-                        {currentView === 'histograms' && (
-                            <div className="animate-fade-in">
-                                <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
-                                    <ChartBarIcon />
-                                    <span className="ml-2">Histogramas de Calidad por Parámetro</span>
-                                </h2>
-                                <ParameterHistograms 
-                                    data={multiTrendData} 
-                                    onExpand={(key) => setZoomConfig({ type: 'histogram', key })}
-                                />
-                            </div>
-                        )}
+                        <div className="max-w-[1600px] mx-auto">
+                            {currentView === 'general' && (
+                                <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+                                    {availableNutrients.map((nutrient) => {
+                                        const chartData = multiTrendData
+                                            .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null)
+                                            .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                        if (chartData.length === 0) return null;
+                                        return (
+                                            <ChartCard 
+                                                key={nutrient.key} 
+                                                title={`Tendencia: ${nutrient.label}`} 
+                                                icon={<TrendingUpIcon />}
+                                                onExpand={() => setZoomConfig({ type: 'daily', key: nutrient.key })}
+                                            >
+                                                <TrendChart 
+                                                    data={chartData} 
+                                                    nutrient={nutrient.label} 
+                                                    color={nutrient.color}
+                                                />
+                                            </ChartCard>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                            
+                            {currentView === 'histograms' && (
+                                <div className="animate-fade-in">
+                                    <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
+                                        <ChartBarIcon />
+                                        <span className="ml-2">Histogramas de Frecuencia</span>
+                                    </h2>
+                                    <ParameterHistograms 
+                                        data={multiTrendData} 
+                                        onExpand={(key) => setZoomConfig({ type: 'histogram', key })}
+                                    />
+                                </div>
+                            )}
 
-                        {currentView === 'monthly_trends' && (
-                             <div className="animate-fade-in">
-                                <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
-                                    <CalendarIcon />
-                                    <span className="ml-2">Promedios Mensuales Consolidados</span>
-                                </h2>
-                                <ParameterMonthlyTrends 
-                                    data={multiTrendData} 
-                                    onExpand={(key) => setZoomConfig({ type: 'monthly', key })}
-                                />
-                            </div>
-                        )}
-                        
-                        {currentView === 'statistics' && (
-                            <div className="animate-fade-in">
-                                <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
-                                    <TableIcon />
-                                    <span className="ml-2">Estadísticas Descriptivas y Referencias</span>
-                                </h2>
-                                <ChartCard title={`Tabla de Calidad: ${selectedMaterial}`} icon={<TableIcon />}>
-                                     <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
-                                </ChartCard>
-                            </div>
-                        )}
+                            {currentView === 'monthly_trends' && (
+                                <div className="animate-fade-in">
+                                    <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
+                                        <CalendarIcon />
+                                        <span className="ml-2">Promedios Mensuales Consolidados</span>
+                                    </h2>
+                                    <ParameterMonthlyTrends 
+                                        data={multiTrendData} 
+                                        onExpand={(key) => setZoomConfig({ type: 'monthly', key })}
+                                    />
+                                </div>
+                            )}
+                            
+                            {currentView === 'statistics' && (
+                                <div className="animate-fade-in">
+                                    <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
+                                        <TableIcon />
+                                        <span className="ml-2">Estadísticas Descriptivas</span>
+                                    </h2>
+                                    <ChartCard title={`Tabla de Calidad: ${selectedMaterial}`} icon={<TableIcon />}>
+                                        <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
+                                    </ChartCard>
+                                </div>
+                            )}
+                        </div>
                     </>
                 )}
             </main>

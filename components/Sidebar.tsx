@@ -3,6 +3,7 @@ import React from 'react';
 import { FileUpload } from './FileUpload';
 import { InfoIcon } from './icons/InfoIcon';
 import { Logo } from './Logo';
+import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 
 interface FilterSelectProps {
     id: string;
@@ -62,6 +63,9 @@ interface SidebarProps {
     setStartDate: (date: string | null) => void;
     endDate: string | null;
     setEndDate: (date: string | null) => void;
+
+    isCollapsed: boolean;
+    onToggleCollapse: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -90,6 +94,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setStartDate,
     endDate,
     setEndDate,
+    isCollapsed,
+    onToggleCollapse
 }) => {
     const handleClearDates = () => {
         setStartDate(null);
@@ -97,106 +103,123 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
 
     return (
-        <aside className="w-full md:w-80 bg-white p-6 flex-shrink-0 flex flex-col space-y-6 border-r border-slate-200">
-            <Logo />
-            
-            {isSampleData && (
-                <div className="text-cyan-800 bg-cyan-100 p-3 rounded-md text-sm" role="alert">
-                    <p className="font-semibold">Modo de Demostración</p>
-                    <p className="text-xs mt-1">Se muestran datos de prueba. Sube tu propio archivo para analizarlo.</p>
+        <aside 
+            className={`bg-white h-screen flex-shrink-0 flex flex-col border-r border-slate-200 transition-all duration-300 ease-in-out relative ${
+                isCollapsed ? 'w-0 overflow-hidden md:w-0' : 'w-full md:w-80 p-6'
+            }`}
+        >
+            <div className={`flex flex-col space-y-6 ${isCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}>
+                <div className="flex items-center justify-between">
+                    <Logo />
+                    <button 
+                        onClick={onToggleCollapse}
+                        className="hidden md:flex p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"
+                        title="Contraer menú"
+                    >
+                        <ChevronLeftIcon />
+                    </button>
                 </div>
-            )}
+                
+                {isSampleData && (
+                    <div className="text-cyan-800 bg-cyan-100 p-3 rounded-md text-sm" role="alert">
+                        <p className="font-semibold">Modo de Demostración</p>
+                        <p className="text-xs mt-1">Se muestran datos de prueba. Sube tu propio archivo para analizarlo.</p>
+                    </div>
+                )}
 
-            <div>
-                <FileUpload onFileParse={onFileParse} isLoading={isLoading} />
-                <button 
-                    onClick={onShowFormatHelp} 
-                    className="mt-2 text-sm text-cyan-600 hover:text-cyan-700 transition-colors flex items-center justify-center w-full"
-                >
-                    <InfoIcon />
-                    <span className="ml-1 underline">Ver formato de archivo requerido</span>
-                </button>
-            </div>
-            
-            {error && <div className="text-red-700 bg-red-100 p-3 rounded-md text-sm">{error}</div>}
-
-            {hasData && (
-                 <div className="flex flex-col space-y-4">
-                    <FilterSelect 
-                        id="material-select"
-                        label="Materia Prima"
-                        value={selectedMaterial}
-                        onChange={setSelectedMaterial}
-                        options={materials}
-                    />
-                    
-                    <hr className="border-slate-200" />
-
+                <div className="space-y-4">
                     <div>
-                        <div className="flex justify-between items-center mb-2">
-                            <label className="block text-sm font-medium text-slate-700">Rango de Fechas</label>
-                            <button
-                                onClick={handleClearDates}
-                                className="text-xs text-cyan-600 hover:text-cyan-800 underline"
-                            >
-                                Limpiar
-                            </button>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                            <div>
-                                <label htmlFor="start-date" className="block text-xs text-slate-500 mb-1">Inicio</label>
-                                <input
-                                    type="date"
-                                    id="start-date"
-                                    value={startDate || ''}
-                                    onChange={(e) => setStartDate(e.target.value || null)}
-                                    className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm pl-3 pr-2 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-slate-900"
-                                />
-                            </div>
-                            <div>
-                                <label htmlFor="end-date" className="block text-xs text-slate-500 mb-1">Fin</label>
-                                <input
-                                    type="date"
-                                    id="end-date"
-                                    value={endDate || ''}
-                                    onChange={(e) => setEndDate(e.target.value || null)}
-                                    min={startDate || undefined}
-                                    className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm pl-3 pr-2 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-slate-900"
-                                />
-                            </div>
-                        </div>
+                        <FileUpload onFileParse={onFileParse} isLoading={isLoading} />
+                        <button 
+                            onClick={onShowFormatHelp} 
+                            className="mt-2 text-sm text-cyan-600 hover:text-cyan-700 transition-colors flex items-center justify-center w-full"
+                        >
+                            <InfoIcon />
+                            <span className="ml-1 underline">Formato de archivo</span>
+                        </button>
                     </div>
                     
-                    <FilterSelect
-                        id="subtipo-select"
-                        label="Subtipo"
-                        value={selectedSubtipo}
-                        onChange={setSelectedSubtipo}
-                        options={availableSubtipos}
-                    />
-                     <FilterSelect
-                        id="cliente-select"
-                        label="Cliente"
-                        value={selectedCliente}
-                        onChange={setSelectedCliente}
-                        options={availableClientes}
-                    />
-                     <FilterSelect
-                        id="proveedor-select"
-                        label="Proveedor"
-                        value={selectedProveedor}
-                        onChange={setSelectedProveedor}
-                        options={availableProveedores}
-                    />
-                     <FilterSelect
-                        id="origen-select"
-                        label="Origen"
-                        value={selectedOrigen}
-                        onChange={setSelectedOrigen}
-                        options={availableOrigenes}
-                    />
-                 </div>
-            )}
+                    {error && <div className="text-red-700 bg-red-100 p-3 rounded-md text-sm">{error}</div>}
+
+                    {hasData && (
+                        <div className="flex flex-col space-y-4 max-h-[calc(100vh-320px)] overflow-y-auto pr-2 custom-scrollbar">
+                            <FilterSelect 
+                                id="material-select"
+                                label="Materia Prima"
+                                value={selectedMaterial}
+                                onChange={setSelectedMaterial}
+                                options={materials}
+                            />
+                            
+                            <hr className="border-slate-200" />
+
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="block text-sm font-medium text-slate-700">Rango de Fechas</label>
+                                    <button
+                                        onClick={handleClearDates}
+                                        className="text-xs text-cyan-600 hover:text-cyan-800 underline"
+                                    >
+                                        Limpiar
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label htmlFor="start-date" className="block text-xs text-slate-500 mb-1">Inicio</label>
+                                        <input
+                                            type="date"
+                                            id="start-date"
+                                            value={startDate || ''}
+                                            onChange={(e) => setStartDate(e.target.value || null)}
+                                            className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-cyan-500 text-slate-900"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label htmlFor="end-date" className="block text-xs text-slate-500 mb-1">Fin</label>
+                                        <input
+                                            type="date"
+                                            id="end-date"
+                                            value={endDate || ''}
+                                            onChange={(e) => setEndDate(e.target.value || null)}
+                                            min={startDate || undefined}
+                                            className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-cyan-500 text-slate-900"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <FilterSelect
+                                id="subtipo-select"
+                                label="Subtipo"
+                                value={selectedSubtipo}
+                                onChange={setSelectedSubtipo}
+                                options={availableSubtipos}
+                            />
+                            <FilterSelect
+                                id="cliente-select"
+                                label="Cliente"
+                                value={selectedCliente}
+                                onChange={setSelectedCliente}
+                                options={availableClientes}
+                            />
+                            <FilterSelect
+                                id="proveedor-select"
+                                label="Proveedor"
+                                value={selectedProveedor}
+                                onChange={setSelectedProveedor}
+                                options={availableProveedores}
+                            />
+                            <FilterSelect
+                                id="origen-select"
+                                label="Origen"
+                                value={selectedOrigen}
+                                onChange={setSelectedOrigen}
+                                options={availableOrigenes}
+                            />
+                        </div>
+                    )}
+                </div>
+            </div>
         </aside>
     );
 };
