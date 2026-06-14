@@ -57,7 +57,7 @@ export const MultiTrendChart: React.FC<MultiTrendChartProps> = ({ data, activeNu
                     const label = nutrientConfig ? nutrientConfig.label.replace(' (%)', '') : key;
 
                     return (
-                        <Line 
+                        <Line isAnimationActive={false} 
                             key={key}
                             type="monotone" 
                             dataKey={key} 

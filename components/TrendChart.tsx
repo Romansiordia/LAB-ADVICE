@@ -97,7 +97,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, i
                 {isCompact && <ReferenceLine y={stats.mean} stroke="#22c55e" strokeDasharray="2 2" opacity={0.3} />}
                 {isCompact && <ReferenceLine y={stats.lcl} stroke="#f43f5e" strokeDasharray="2 2" opacity={0.3} />}
 
-                <Line 
+                <Line isAnimationActive={false} 
                     type="monotone" 
                     dataKey="value" 
                     name={nutrient} 

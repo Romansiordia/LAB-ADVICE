@@ -103,14 +103,30 @@ const App: React.FC = () => {
         try {
             const element = document.getElementById('report-content');
             if (element) {
-                const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+                // Force scroll to top to avoid cut off
+                window.scrollTo(0, 0);
+                
+                const canvas = await html2canvas(element, { 
+                    scale: 2, 
+                    useCORS: true, 
+                    backgroundColor: '#163c65', // Match background color for better look
+                    windowWidth: 1200, // Force desktop width for PDF rendering to avoid dozens of mobile pages
+                    onclone: (document) => {
+                        const el = document.getElementById('report-content');
+                        if (el) {
+                           // Force specific styles for PDF
+                           el.style.width = '1200px';
+                           el.style.maxWidth = '1200px';
+                           el.style.margin = '0';
+                        }
+                    }
+                });
                 const imgData = canvas.toDataURL('image/png');
                 
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
                 
-                // If the height is greater than one page, jsPdf allows it, but it's just one long page or it gets cut. Let's create multiple pages if needed.
                 let heightLeft = pdfHeight;
                 let position = 0;
                 const pageHeight = pdf.internal.pageSize.getHeight();
@@ -118,7 +134,7 @@ const App: React.FC = () => {
                 pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
                 heightLeft -= pageHeight;
                 
-                while (heightLeft >= 0) {
+                while (heightLeft > 0) {
                     position = heightLeft - pdfHeight;
                     pdf.addPage();
                     pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
@@ -129,7 +145,6 @@ const App: React.FC = () => {
             }
         } catch (error) {
             console.error('Error al generar PDF:', error);
-            setError('No se pudo generar el PDF.');
         } finally {
             setIsGeneratingPdf(false);
         }
@@ -470,13 +485,13 @@ const App: React.FC = () => {
                                         <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
                                     </div>
                                     <div className="mt-8 border-t border-ui-border pt-6">
-                                        <h2 className="text-xl font-bold text-slate-100 mb-2">Vista Actual de Gráficos</h2>
-                                        <p className="text-slate-400 mb-6 text-sm">Mostrando el detalle visual seleccionado al momento de generar el reporte.</p>
+                                        <h2 className="text-xl font-bold text-slate-100 mb-2">Análisis Gráfico</h2>
+                                        <p className="text-slate-400 mb-6 text-sm">Desglose de tendencias, distribuciones y análisis de proveedores.</p>
                                     </div>
                                 </div>
                             )}
 
-                            {['general', 'histograms', 'monthly_trends'].includes(currentView) && (
+                            {(isGeneratingPdf || ['general', 'histograms', 'monthly_trends'].includes(currentView)) && (
                                 <div className="space-y-8">
                                     <div className="animate-fade-in grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                         {availableNutrients.map((nutrient) => {
@@ -513,7 +528,7 @@ const App: React.FC = () => {
                                         })}
                                     </div>
 
-                                    {currentView === 'general' && (
+                                    {(isGeneratingPdf || currentView === 'general') && (
                                         <div className="animate-fade-in mt-8">
                                             <div className="mb-6 px-1">
                                                 <h2 className="text-xl font-bold text-slate-100">Tendencias de Parámetros</h2>
@@ -550,7 +565,7 @@ const App: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {currentView === 'histograms' && (
+                                    {(isGeneratingPdf || currentView === 'histograms') && (
                                         <div className="animate-fade-in mt-8">
                                             <div className="mb-6 px-1">
                                                 <h2 className="text-xl font-bold text-slate-100">Distribución de Parámetros</h2>
@@ -589,7 +604,7 @@ const App: React.FC = () => {
                                     )}                                </div>
                             )}
 
-                            {currentView === 'monthly_trends' && (
+                            {(isGeneratingPdf || currentView === 'monthly_trends') && (
                                 <div className="animate-fade-in mt-8">
                                     <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
                                         <CalendarIcon />
@@ -618,7 +633,7 @@ const App: React.FC = () => {
                                 </div>
                             )}
 
-                            {currentView === 'supplier_quality' && !isGeneratingPdf && (
+                            {(isGeneratingPdf || currentView === 'supplier_quality') && (
                                 <div className="animate-fade-in mt-8">
                                     <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
                                         <ShieldCheckIcon />

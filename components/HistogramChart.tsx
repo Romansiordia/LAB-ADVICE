@@ -99,7 +99,7 @@ export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, 
                     cursor={{ fill: '#f1f5f9' }}
                 />
                 {!isCompact && <Legend />}
-                <Bar 
+                <Bar isAnimationActive={false} 
                     dataKey="count" 
                     name="Frecuencia" 
                     fill={color || "#10b981"} 

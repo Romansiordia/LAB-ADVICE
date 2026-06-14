@@ -44,7 +44,7 @@ export const AverageNutrientChart: React.FC<AverageNutrientChartProps> = ({ data
                     labelStyle={{ color: '#334155' }}
                     formatter={(value: number) => [value.toFixed(2), 'Promedio']}
                 />
-                <Bar dataKey="value" name="Promedio">
+                <Bar isAnimationActive={false} dataKey="value" name="Promedio">
                     {data.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                     ))}
