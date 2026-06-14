@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, startTransition } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Sidebar } from './components/Sidebar';
 import { MultiTrendChart } from './components/MultiTrendChart';
@@ -408,7 +408,9 @@ const App: React.FC = () => {
                                             if (tab.id === 'ai_analysis') {
                                                 handleAiAnalysis();
                                             } else {
-                                                setCurrentView(tab.id as ViewMode);
+                                                startTransition(() => {
+                                                    setCurrentView(tab.id as ViewMode);
+                                                });
                                             }
                                         }}
                                         className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap border ${
@@ -505,7 +507,7 @@ const App: React.FC = () => {
                                                     rejectionRate={rejectionRate}
                                                     icon={getNutrientIcon(nutrient.key, "w-4 h-4 text-white stroke-[2]")}
                                                     color={nutrient.color || '#0ea5e9'}
-                                                    onClick={() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key })}
+                                                    onClick={() => startTransition(() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key }))}
                                                 />
                                             );
                                         })}
