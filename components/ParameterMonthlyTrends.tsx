@@ -1,8 +1,7 @@
 
 import React from 'react';
-import { MonthlyTrendChart } from './MonthlyTrendChart';
-import { ChartCard } from './ChartCard';
-import { CalendarIcon } from './icons/CalendarIcon';
+import { KpiCard } from './KpiCard';
+import { getNutrientIcon } from './icons/getNutrientIcon';
 import { NUTRIENTS } from '../constants';
 import { RawMaterialData } from '../types';
 
@@ -16,14 +15,16 @@ export const getMonthlyData = (data: RawMaterialData[], nutrientKey: string) => 
 
     data.forEach(d => {
         const val = d[nutrientKey];
-        if (val !== undefined && val !== null && !isNaN(Number(val))) {
+        if (val !== undefined && val !== null && val !== '') {
             const numVal = Number(val);
-            const monthKey = d.date.substring(0, 7); // YYYY-MM
-            if (!monthlyData[monthKey]) {
-                monthlyData[monthKey] = { sum: 0, count: 0 };
+            if (!isNaN(numVal) && numVal !== 0) {
+                const monthKey = d.date.substring(0, 7); // YYYY-MM
+                if (!monthlyData[monthKey]) {
+                    monthlyData[monthKey] = { sum: 0, count: 0 };
+                }
+                monthlyData[monthKey].sum += numVal;
+                monthlyData[monthKey].count++;
             }
-            monthlyData[monthKey].sum += numVal;
-            monthlyData[monthKey].count++;
         }
     });
 
@@ -37,7 +38,7 @@ export const getMonthlyData = (data: RawMaterialData[], nutrientKey: string) => 
 
 export const ParameterMonthlyTrends: React.FC<ParameterMonthlyTrendsProps> = ({ data, onExpand }) => {
     if (!data || data.length === 0) {
-        return <div className="text-center text-slate-500 py-10">No hay datos disponibles para generar tendencias mensuales.</div>;
+        return <div className="text-center text-slate-400 py-10">No hay datos disponibles para generar tendencias mensuales.</div>;
     }
 
     return (
@@ -48,14 +49,14 @@ export const ParameterMonthlyTrends: React.FC<ParameterMonthlyTrendsProps> = ({ 
                 if (chartData.length === 0) return null;
 
                 return (
-                    <ChartCard 
-                        key={nutrient.key} 
-                        title={`Promedio Mensual: ${nutrient.label}`} 
-                        icon={<CalendarIcon />}
-                        onExpand={onExpand ? () => onExpand(nutrient.key) : undefined}
-                    >
-                        <MonthlyTrendChart data={chartData} nutrient={nutrient.label} />
-                    </ChartCard>
+                    <KpiCard
+                        key={`monthly-${nutrient.key}`}
+                        title={`Promedio: ${nutrient.label}`}
+                        value={chartData.length > 0 ? `${chartData[chartData.length - 1].value.toFixed(2)}%` : undefined}
+                        icon={getNutrientIcon(nutrient.key, "w-8 h-8")}
+                        color={nutrient.color || '#0ea5e9'}
+                        onClick={onExpand ? () => onExpand(nutrient.key) : undefined}
+                    />
                 );
             })}
         </div>

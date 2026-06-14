@@ -14,7 +14,7 @@ const COLORS = ['#06b6d4', '#10b981', '#3b82f6', '#0891b2', '#059669', '#2563eb'
 
 export const AverageNutrientChart: React.FC<AverageNutrientChartProps> = ({ data }) => {
     if (!data || data.length === 0) {
-        return <div className="flex items-center justify-center h-full text-slate-500">No hay datos de promedios para mostrar.</div>;
+        return <div className="flex items-center justify-center h-full text-slate-400">No hay datos de promedios para mostrar.</div>;
     }
     
     return (

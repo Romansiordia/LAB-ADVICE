@@ -7,6 +7,7 @@ interface HistogramChartProps {
     data: { date: string, value: number }[];
     nutrient: string;
     color?: string;
+    isCompact?: boolean;
 }
 
 const createHistogramData = (data: { value: number }[], numBins = 10): HistogramBin[] => {
@@ -44,40 +45,67 @@ const createHistogramData = (data: { value: number }[], numBins = 10): Histogram
     return bins;
 };
 
+export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, color, isCompact = false }) => {
 
-export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, color }) => {
-
-    const histogramData = useMemo(() => createHistogramData(data), [data]);
+    const histogramData = useMemo(() => createHistogramData(data, isCompact ? 8 : 12), [data, isCompact]);
 
     if (!data || data.length === 0) {
-        return <div className="flex items-center justify-center h-full text-slate-500">No hay datos disponibles para esta selección.</div>;
+        return <div className="flex items-center justify-center h-full text-slate-400">No hay datos disponibles para esta selección.</div>;
     }
     
     return (
         <ResponsiveContainer width="100%" height="100%">
             <BarChart
                 data={histogramData}
-                margin={{
+                margin={isCompact ? { top: 10, right: 10, left: 10, bottom: 5 } : {
                     top: 5,
                     right: 30,
                     left: 0,
                     bottom: 5,
                 }}
             >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                <XAxis dataKey="range" stroke="#64748b" fontSize={10} angle={-30} textAnchor="end" height={50} />
-                <YAxis allowDecimals={false} stroke="#64748b" fontSize={12} />
+                {!isCompact && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />}
+                <XAxis 
+                    dataKey="range" 
+                    stroke="#94a3b8" 
+                    fontSize={10} 
+                    fontWeight={500}
+                    tick={{ fill: '#cbd5e1' }}
+                    angle={-30} 
+                    textAnchor="end" 
+                    height={50} 
+                    hide={isCompact}
+                />
+                {isCompact && <XAxis dataKey="range" hide={false} tick={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} height={1} />}
+                
+                <YAxis 
+                    allowDecimals={false} 
+                    stroke="#94a3b8" 
+                    fontSize={12} 
+                    fontWeight={500}
+                    tick={{ fill: '#cbd5e1' }}
+                    hide={isCompact}
+                />
+                
                 <Tooltip 
                     contentStyle={{ 
-                        backgroundColor: 'white', 
-                        border: '1px solid #e2e8f0',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)' 
+                        backgroundColor: '#132641', 
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                        borderRadius: '8px',
+                        fontSize: '12px'
                     }} 
-                    labelStyle={{ color: '#334155' }}
+                    labelStyle={{ color: '#f1f5f9', fontWeight: 'bold' }}
                     cursor={{ fill: '#f1f5f9' }}
                 />
-                <Legend />
-                <Bar dataKey="count" name="Frecuencia" fill={color || "#10b981"} radius={[4, 4, 0, 0]} />
+                {!isCompact && <Legend />}
+                <Bar 
+                    dataKey="count" 
+                    name="Frecuencia" 
+                    fill={color || "#10b981"} 
+                    radius={[4, 4, 0, 0]} 
+                    animationDuration={1000}
+                />
             </BarChart>
         </ResponsiveContainer>
     );

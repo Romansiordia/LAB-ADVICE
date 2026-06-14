@@ -12,4 +12,6 @@ export const NUTRIENTS = [
     { key: 'fosforo', label: 'Fósforo (%)', color: '#ec4899' }, // Pink
     { key: 'fda', label: 'FDA (%)', color: '#f97316' }, // Orange
     { key: 'fdn', label: 'FDN (%)', color: '#14b8a6' }, // Teal
+    { key: 'pdi', label: 'PDI (%)', color: '#84cc16' }, // Lime
+    { key: 'tamano_particula', label: 'Tamaño de Partícula (µm)', color: '#a855f7' }, // Purple
 ];

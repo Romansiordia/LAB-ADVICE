@@ -16,12 +16,12 @@ interface FilterSelectProps {
 const FilterSelect: React.FC<FilterSelectProps> = ({ id, label, value, onChange, options }) => {
     return (
         <div>
-            <label htmlFor={id} className="block text-sm font-medium text-slate-700 mb-2">{label}</label>
+            <label htmlFor={id} className="block text-sm font-medium text-slate-300 mb-2">{label}</label>
             <select
                 id={id}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-cyan-500 focus:border-cyan-500 sm:text-sm text-slate-900 disabled:bg-slate-200 disabled:text-slate-500 disabled:cursor-not-allowed"
+                className="w-full bg-ui-darkest border border-ui-border rounded-md shadow-sm pl-3 pr-10 py-2 text-left cursor-default focus:outline-none focus:ring-1 focus:ring-ui-accent focus:border-ui-accent sm:text-sm text-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
             >
                 {options.map(option => (
                     <option key={option} value={option}>{option}</option>
@@ -104,45 +104,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     return (
         <aside 
-            className={`bg-white h-screen flex-shrink-0 flex flex-col border-r border-slate-200 transition-all duration-300 ease-in-out relative ${
-                isCollapsed ? 'w-0 overflow-hidden md:w-0' : 'w-full md:w-80 p-6'
+            className={`bg-ui-card h-screen flex-shrink-0 flex flex-col border-r border-ui-border transition-all duration-300 ease-in-out relative ${
+                isCollapsed ? 'w-0 overflow-hidden md:w-0' : 'w-full md:w-80 p-6 flex flex-col'
             }`}
         >
-            <div className={`flex flex-col space-y-6 ${isCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}>
-                <div className="flex items-center justify-between">
+            <div className={`flex flex-col h-full ${isCollapsed ? 'opacity-0' : 'opacity-100'} transition-opacity duration-300`}>
+                <div className="flex items-center justify-between mb-6 flex-shrink-0">
                     <Logo />
                     <button 
                         onClick={onToggleCollapse}
-                        className="hidden md:flex p-1.5 text-slate-400 hover:text-cyan-600 hover:bg-cyan-50 rounded-lg transition-colors"
+                        className="hidden md:flex p-1.5 text-slate-400 hover:text-ui-accent hover:bg-ui-accent/10 text-ui-accent rounded-lg transition-colors"
                         title="Contraer menú"
                     >
                         <ChevronLeftIcon />
                     </button>
                 </div>
                 
-                {isSampleData && (
-                    <div className="text-cyan-800 bg-cyan-100 p-3 rounded-md text-sm" role="alert">
-                        <p className="font-semibold">Modo de Demostración</p>
-                        <p className="text-xs mt-1">Se muestran datos de prueba. Sube tu propio archivo para analizarlo.</p>
-                    </div>
-                )}
-
-                <div className="space-y-4">
-                    <div>
-                        <FileUpload onFileParse={onFileParse} isLoading={isLoading} />
-                        <button 
-                            onClick={onShowFormatHelp} 
-                            className="mt-2 text-sm text-cyan-600 hover:text-cyan-700 transition-colors flex items-center justify-center w-full"
-                        >
-                            <InfoIcon />
-                            <span className="ml-1 underline">Formato de archivo</span>
-                        </button>
-                    </div>
-                    
-                    {error && <div className="text-red-700 bg-red-100 p-3 rounded-md text-sm">{error}</div>}
+                <div className="flex flex-col flex-1 overflow-hidden">
+                    {error && <div className="text-red-700 bg-red-100 p-3 rounded-md text-sm mb-4 flex-shrink-0">{error}</div>}
 
                     {hasData && (
-                        <div className="flex flex-col space-y-4 max-h-[calc(100vh-320px)] overflow-y-auto pr-2 custom-scrollbar">
+                        <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pt-2 custom-scrollbar flex-1 pb-4">
                             <FilterSelect 
                                 id="material-select"
                                 label="Materia Prima"
@@ -151,38 +133,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 options={materials}
                             />
                             
-                            <hr className="border-slate-200" />
+                            <hr className="border-ui-border" />
 
                             <div>
                                 <div className="flex justify-between items-center mb-2">
-                                    <label className="block text-sm font-medium text-slate-700">Rango de Fechas</label>
+                                    <label className="block text-sm font-medium text-slate-300">Rango de Fechas</label>
                                     <button
                                         onClick={handleClearDates}
-                                        className="text-xs text-cyan-600 hover:text-cyan-800 underline"
+                                        className="text-xs text-ui-accent hover:text-cyan-800 underline"
                                     >
                                         Limpiar
                                     </button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
-                                        <label htmlFor="start-date" className="block text-xs text-slate-500 mb-1">Inicio</label>
+                                        <label htmlFor="start-date" className="block text-xs text-slate-400 mb-1">Inicio</label>
                                         <input
                                             type="date"
                                             id="start-date"
                                             value={startDate || ''}
                                             onChange={(e) => setStartDate(e.target.value || null)}
-                                            className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-cyan-500 text-slate-900"
+                                            className="w-full bg-ui-darkest border border-ui-border rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-ui-accent text-slate-100"
                                         />
                                     </div>
                                     <div>
-                                        <label htmlFor="end-date" className="block text-xs text-slate-500 mb-1">Fin</label>
+                                        <label htmlFor="end-date" className="block text-xs text-slate-400 mb-1">Fin</label>
                                         <input
                                             type="date"
                                             id="end-date"
                                             value={endDate || ''}
                                             onChange={(e) => setEndDate(e.target.value || null)}
                                             min={startDate || undefined}
-                                            className="w-full bg-slate-50 border border-slate-300 rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-cyan-500 text-slate-900"
+                                            className="w-full bg-ui-darkest border border-ui-border rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-ui-accent text-slate-100"
                                         />
                                     </div>
                                 </div>

@@ -10,11 +10,11 @@ interface MultiTrendChartProps {
 
 export const MultiTrendChart: React.FC<MultiTrendChartProps> = ({ data, activeNutrients }) => {
     if (!data || data.length === 0) {
-        return <div className="flex items-center justify-center h-full text-slate-500">No hay datos disponibles para esta selección.</div>;
+        return <div className="flex items-center justify-center h-full text-slate-400">No hay datos disponibles para esta selección.</div>;
     }
 
     if (activeNutrients.length === 0) {
-        return <div className="flex items-center justify-center h-full text-slate-500">Selecciona al menos un parámetro para visualizar.</div>;
+        return <div className="flex items-center justify-center h-full text-slate-400">Selecciona al menos un parámetro para visualizar.</div>;
     }
 
     const formatDate = (tickItem: string) => {
@@ -32,16 +32,16 @@ export const MultiTrendChart: React.FC<MultiTrendChartProps> = ({ data, activeNu
                     bottom: 5,
                 }}
             >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="date" tickFormatter={formatDate} stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} domain={['auto', 'auto']} />
                 <Tooltip 
                     contentStyle={{ 
-                        backgroundColor: 'white', 
-                        border: '1px solid #e2e8f0',
+                        backgroundColor: '#132641', 
+                        border: '1px solid rgba(255,255,255,0.1)',
                         boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
                     }} 
-                    labelStyle={{ color: '#334155' }}
+                    labelStyle={{ color: '#f1f5f9' }}
                 />
                 <Legend verticalAlign="top" height={36} />
                 <Brush 

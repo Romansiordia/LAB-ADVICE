@@ -60,18 +60,18 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
             aria-modal="true"
         >
             <div
-                className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-2xl w-full text-slate-700 relative transform transition-all flex flex-col"
+                className="bg-ui-card rounded-lg shadow-xl p-6 m-4 max-w-2xl w-full text-slate-300 relative transform transition-all flex flex-col"
                 onClick={(e) => e.stopPropagation()}
                 style={{ maxHeight: '80vh' }}
             >
                 <button
                     onClick={onClose}
-                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-400"
                     aria-label="Cerrar modal"
                 >
                     <XIcon />
                 </button>
-                <h2 className="text-2xl font-bold text-slate-900 mb-4 flex items-center">
+                <h2 className="text-2xl font-bold text-slate-100 mb-4 flex items-center">
                     <SparklesIcon />
                     <span className="ml-2">Análisis con IA</span>
                 </h2>
@@ -79,11 +79,11 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
                 <div className="overflow-y-auto">
                     {isLoading && (
                         <div className="flex flex-col items-center justify-center p-8">
-                            <svg className="animate-spin h-10 w-10 text-cyan-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <svg className="animate-spin h-10 w-10 text-ui-accent mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                             </svg>
-                            <p className="text-slate-600">Generando interpretación de los datos...</p>
+                            <p className="text-slate-400">Generando interpretación de los datos...</p>
                             <p className="text-sm text-slate-400 mt-1">Esto puede tardar unos segundos.</p>
                         </div>
                     )}
@@ -94,15 +94,15 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
                         </div>
                     )}
                     {!isLoading && result && (
-                         <div ref={contentRef} className="prose prose-sm max-w-none text-slate-800"></div>
+                         <div ref={contentRef} className="prose prose-sm max-w-none text-slate-100"></div>
                     )}
                 </div>
 
-                <div className="mt-6 flex justify-end items-center border-t border-slate-200 pt-4 space-x-3">
+                <div className="mt-6 flex justify-end items-center border-t border-ui-border pt-4 space-x-3">
                     {result && !isLoading && (
                         <button
                             onClick={handleDownload}
-                            className="flex items-center bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                            className="flex items-center bg-ui-accent hover:shadow-[0_0_15px_rgba(0,210,255,0.3)] text-[#040d1a] hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors"
                         >
                             <DownloadIcon />
                             <span className="ml-2">Descargar Reporte</span>
@@ -110,7 +110,7 @@ export const AiAnalysisModal: React.FC<AiAnalysisModalProps> = ({ isOpen, onClos
                     )}
                     <button
                         onClick={onClose}
-                        className="bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold py-2 px-4 rounded transition-colors"
+                        className="bg-slate-200 hover:bg-slate-300 text-slate-100 font-bold py-2 px-4 rounded transition-colors"
                     >
                         Cerrar
                     </button>

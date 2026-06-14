@@ -5,7 +5,6 @@ import { Sidebar } from './components/Sidebar';
 import { MultiTrendChart } from './components/MultiTrendChart';
 import { TrendChart } from './components/TrendChart';
 import { HistogramChart } from './components/HistogramChart';
-import { ChartCard } from './components/ChartCard';
 import { TrendingUpIcon } from './components/icons/TrendingUpIcon';
 import { ChartBarIcon } from './components/icons/ChartBarIcon';
 import { DataFormatModal } from './components/DataFormatModal';
@@ -17,21 +16,28 @@ import { SparklesIcon } from './components/icons/SparklesIcon';
 import { MonthlyTrendChart } from './components/MonthlyTrendChart';
 import { CalendarIcon } from './components/icons/CalendarIcon';
 import { Logo } from './components/Logo';
-import { ParameterHistograms } from './components/ParameterHistograms';
 import { ParameterMonthlyTrends, getMonthlyData } from './components/ParameterMonthlyTrends';
 import { NutrientStatsTable } from './components/NutrientStatsTable';
 import { TableIcon } from './components/icons/TableIcon';
 import { ChartZoomModal } from './components/ChartZoomModal';
 import { ChevronRightIcon } from './components/icons/ChevronRightIcon';
-// Added missing ChevronLeftIcon import
 import { ChevronLeftIcon } from './components/icons/ChevronLeftIcon';
-
+import { FileUpload } from './components/FileUpload';
+import { UploadIcon } from './components/icons/UploadIcon';
+import { InfoIcon } from './components/icons/InfoIcon';
+import { KpiCard } from './components/KpiCard';
+import { getNutrientIcon } from './components/icons/getNutrientIcon';
+import { DownloadIcon } from './components/icons/DownloadIcon';
+import { ShieldCheckIcon } from './components/icons/ShieldCheckIcon';
+import { SupplierAnalysis } from './components/SupplierAnalysis';
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
 
 declare const Papa: any;
 declare const XLSX: any;
 
 const ALL_FILTER = 'Todos';
-type ViewMode = 'general' | 'histograms' | 'monthly_trends' | 'statistics';
+type ViewMode = 'general' | 'histograms' | 'monthly_trends' | 'statistics' | 'supplier_quality';
 type ZoomType = 'daily' | 'histogram' | 'monthly';
 
 interface ZoomConfig {
@@ -58,13 +64,17 @@ const parseDateDDMMYYYY = (dateInput: any): Date | null => {
         const day = parseInt(parts[1], 10);
         const month = parseInt(parts[2], 10) - 1; 
         const year = parseInt(parts[3], 10);
-        if (year < 1000 || year > 3000 || month < 0 || month > 11 || day < 1 || day > 31) {
-            return null;
+        if (year >= 1000 && year <= 3000 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
+            const date = new Date(Date.UTC(year, month, day));
+            if (date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
+                return date;
+            }
         }
-        const date = new Date(Date.UTC(year, month, day));
-        if (date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
-            return date;
-        }
+    }
+    // Fallback to standard JS parsing (handles YYYY-MM-DD, MM/DD/YYYY, etc.)
+    const fallbackDate = new Date(dateStr);
+    if (!isNaN(fallbackDate.getTime())) {
+        return fallbackDate;
     }
     return null;
 };
@@ -83,6 +93,47 @@ const App: React.FC = () => {
 
     const [zoomConfig, setZoomConfig] = useState<ZoomConfig | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+    const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+    
+    const handleGeneratePdf = async () => {
+        setIsGeneratingPdf(true);
+        // Wait for React to render the full report view and charts to resize
+        await new Promise(resolve => setTimeout(resolve, 800));
+        
+        try {
+            const element = document.getElementById('report-content');
+            if (element) {
+                const canvas = await html2canvas(element, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+                const imgData = canvas.toDataURL('image/png');
+                
+                const pdf = new jsPDF('p', 'mm', 'a4');
+                const pdfWidth = pdf.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                
+                // If the height is greater than one page, jsPdf allows it, but it's just one long page or it gets cut. Let's create multiple pages if needed.
+                let heightLeft = pdfHeight;
+                let position = 0;
+                const pageHeight = pdf.internal.pageSize.getHeight();
+                
+                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                heightLeft -= pageHeight;
+                
+                while (heightLeft >= 0) {
+                    position = heightLeft - pdfHeight;
+                    pdf.addPage();
+                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
+                    heightLeft -= pageHeight;
+                }
+                
+                pdf.save(`Reporte_Calidad_${selectedMaterial}_${new Date().toISOString().split('T')[0]}.pdf`);
+            }
+        } catch (error) {
+            console.error('Error al generar PDF:', error);
+            setError('No se pudo generar el PDF.');
+        } finally {
+            setIsGeneratingPdf(false);
+        }
+    };
 
     const firstSampleMaterial = SAMPLE_DATA.length > 0 ? SAMPLE_DATA[0].material : '';
     const [selectedMaterial, setSelectedMaterial] = useState<string>(firstSampleMaterial);
@@ -117,7 +168,10 @@ const App: React.FC = () => {
                 }
                 const normalizedData = parsedData.map(row => {
                     const newRow: {[key: string]: any} = {};
-                    for (const key in row) { newRow[key.toLowerCase()] = row[key]; }
+                    for (const key in row) { 
+                        const cleanKey = key.trim().replace(/^\uFEFF/, '').toLowerCase();
+                        newRow[cleanKey] = row[key]; 
+                    }
                     return newRow;
                 });
                 const formattedData: RawMaterialData[] = normalizedData
@@ -126,7 +180,7 @@ const App: React.FC = () => {
                         if (!dateObj) return null;
                         const newRow: RawMaterialData = {
                             date: dateObj.toISOString(),
-                            material: row.material,
+                            material: row.material || 'Desconocido',
                             subtipo: row.subtipo,
                             Cliente: row.cliente,
                             Proveedor: row.proveedor,
@@ -140,7 +194,7 @@ const App: React.FC = () => {
                     })
                     .filter((row): row is RawMaterialData => row !== null && !!row.date && !!row.material)
                     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                if(formattedData.length === 0) throw new Error('No se encontraron datos válidos.');
+                if(formattedData.length === 0) throw new Error('No se encontraron datos válidos. Revisa el formato de fecha (DD/MM/AAAA) y las columnas requeridas (date, material).');
                 setRawData(formattedData);
                 setSelectedMaterial(formattedData[0].material);
             } catch (e: any) {
@@ -210,7 +264,7 @@ const App: React.FC = () => {
 
         if (zoomConfig.type === 'daily' || zoomConfig.type === 'histogram') {
             const data = multiTrendData
-                .filter(d => d[zoomConfig.key] !== undefined && d[zoomConfig.key] !== null)
+                .filter(d => d[zoomConfig.key] !== undefined && d[zoomConfig.key] !== null && d[zoomConfig.key] !== '' && Number(d[zoomConfig.key]) !== 0)
                 .map(d => ({ date: d.date, value: Number(d[zoomConfig.key]) }));
             return { config, data };
         } else {
@@ -220,7 +274,7 @@ const App: React.FC = () => {
     }, [zoomConfig, multiTrendData]);
 
     return (
-        <div className="min-h-screen bg-slate-100 text-slate-900 flex flex-col md:flex-row overflow-hidden">
+        <div className="min-h-screen bg-transparent text-slate-100 flex flex-col md:flex-row overflow-hidden">
             <Sidebar
                 onFileParse={handleFileParse}
                 selectedMaterial={selectedMaterial}
@@ -255,7 +309,7 @@ const App: React.FC = () => {
                 {isSidebarCollapsed && (
                     <button 
                         onClick={() => setIsSidebarCollapsed(false)}
-                        className="hidden md:flex absolute top-4 left-4 z-40 p-2 bg-white border border-slate-200 text-slate-400 hover:text-cyan-600 rounded-lg shadow-md transition-all hover:scale-105"
+                        className="hidden md:flex absolute top-4 left-4 z-40 p-2 bg-ui-card border border-ui-border text-slate-400 hover:text-ui-accent rounded-lg shadow-md transition-all hover:scale-105"
                         title="Expandir menú"
                     >
                         <ChevronRightIcon />
@@ -266,7 +320,7 @@ const App: React.FC = () => {
                 {!isSidebarCollapsed && (
                     <button 
                         onClick={() => setIsSidebarCollapsed(true)}
-                        className="md:hidden mb-4 p-2 bg-white border border-slate-200 text-slate-400 rounded-lg flex items-center justify-center w-full shadow-sm"
+                        className="md:hidden mb-4 p-2 bg-ui-card border border-ui-border text-slate-400 rounded-lg flex items-center justify-center w-full shadow-sm"
                     >
                         <span className="text-sm font-semibold mr-2">Ocultar Filtros</span>
                         <ChevronLeftIcon />
@@ -275,7 +329,7 @@ const App: React.FC = () => {
                 {isSidebarCollapsed && (
                     <button 
                         onClick={() => setIsSidebarCollapsed(false)}
-                        className="md:hidden mb-4 p-2 bg-white border border-slate-200 text-cyan-600 rounded-lg flex items-center justify-center w-full shadow-sm"
+                        className="md:hidden mb-4 p-2 bg-ui-card border border-ui-border text-ui-accent rounded-lg flex items-center justify-center w-full shadow-sm"
                     >
                         <span className="text-sm font-semibold mr-2">Mostrar Filtros</span>
                         <ChevronRightIcon />
@@ -288,97 +342,254 @@ const App: React.FC = () => {
                     </div>
                 ) : rawData.length === 0 ? (
                     <div className="flex items-center justify-center h-full">
-                        <div className="text-center p-8 bg-white border border-slate-200 rounded-lg max-w-md w-full shadow-lg">
-                            <h2 className="text-2xl font-bold text-slate-900 mb-2">No Hay Datos Para Mostrar</h2>
-                            <p className="text-slate-500">Sube un archivo para visualizar tus datos y empezar el análisis pecuario.</p>
+                        <div className="text-center p-8 bg-ui-card border border-ui-border rounded-lg max-w-md w-full shadow-lg flex flex-col items-center">
+                            <h2 className="text-2xl font-bold text-slate-100 mb-2">No Hay Datos Para Mostrar</h2>
+                            <p className="text-slate-400 mb-6">Sube un archivo para visualizar tus datos y empezar el análisis pecuario.</p>
+                            <div className="w-full h-32 flex items-center justify-center">
+                                <FileUpload onFileParse={handleFileParse} isLoading={isLoading} />
+                            </div>
                         </div>
                     </div>
                 ) : (
                     <>
                         <header className="mb-6">
-                           <div className="grid md:grid-cols-3 items-center gap-y-4 gap-x-2">
-                                <div className="md:col-start-2 text-center">
-                                    <Logo as="h1" showMaterial={selectedMaterial} />
-                                    <p className="text-slate-500 mt-1">Análisis de <span className='font-semibold text-slate-700'>{selectedMaterial}</span></p>
-                                </div>
-                                <div className="md:col-start-3 justify-self-end">
-                                    <button 
-                                        onClick={handleAiAnalysis}
-                                        className="flex items-center bg-cyan-600 text-white font-semibold py-2.5 px-5 rounded-xl shadow-lg hover:bg-cyan-700 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
-                                        disabled={multiTrendData.length === 0 || isLoading}
-                                    >
-                                        <SparklesIcon />
-                                        <span className="ml-2">Analizar con IA</span>
-                                    </button>
-                                </div>
+                           <div className="bg-ui-card rounded-xl border border-ui-border p-4 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+                                <div className="flex items-center space-x-4">
+                                     <div className="bg-ui-darkest/50 border border-ui-border rounded-xl p-3 shrink-0">
+                                         <div className="w-8 h-8 rounded-full border-[3px] border-ui-accent flex items-center justify-center">
+                                            <div className="w-2 h-2 rounded-full bg-ui-accent"></div>
+                                         </div>
+                                     </div>
+                                     <div>
+                                         <h1 className="text-lg font-bold text-slate-100 uppercase tracking-widest">
+                                             MATERIAL / PRODUCTO SELECCIONADO
+                                         </h1>
+                                         <p className="text-slate-400 mt-1 text-[13px]">Seleccione la matriz para validar su regresión y estadísticas particulares.</p>
+                                     </div>
+                                 </div>
+                                 <div className="flex items-center gap-3 w-full md:w-auto">
+                                     <select
+                                            value={selectedMaterial}
+                                            onChange={(e) => setSelectedMaterial(e.target.value)}
+                                            className="bg-ui-darkest border border-ui-border text-slate-100 font-bold rounded-lg px-4 py-2.5 uppercase w-full md:w-48 appearance-none focus:ring-1 focus:ring-ui-accent outline-none"
+                                     >
+                                         {availableMaterials.map(mat => (
+                                             <option key={mat} value={mat}>{mat}</option>
+                                         ))}
+                                     </select>
+                                     <button
+                                         onClick={handleGeneratePdf}
+                                         className="flex items-center justify-center bg-ui-darkest border border-ui-border text-slate-300 py-2.5 px-4 rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all shrink-0"
+                                         disabled={multiTrendData.length === 0 || isLoading || isGeneratingPdf}
+                                         title="Generar PDF"
+                                     >
+                                         {isGeneratingPdf ? (
+                                             <div className="animate-spin h-5 w-5 border-2 border-slate-500 border-t-transparent rounded-full" />
+                                         ) : (
+                                             <DownloadIcon />
+                                         )}
+                                     </button>
+                                 </div>
                             </div>
                         </header>
 
-                        <div className="flex justify-center mb-8">
-                            <div className="bg-white p-1.5 rounded-xl shadow-sm border border-slate-200 flex space-x-1 overflow-x-auto max-w-full">
+                        <div className="flex justify-between items-center mb-8">
+                            <div className="bg-transparent rounded-xl flex flex-wrap gap-2">
                                 {[
-                                    { id: 'general', label: 'Tendencias Diarias' },
-                                    { id: 'histograms', label: 'Distribuciones' },
-                                    { id: 'monthly_trends', label: 'Promedios Mensuales' },
-                                    { id: 'statistics', label: 'Ficha Técnica' }
+                                    { id: 'general', label: 'Tendencias' },
+                                    { id: 'histograms', label: 'Distribución' },
+                                    { id: 'statistics', label: 'Estadísticas' },
+                                    { id: 'supplier_quality', label: 'Proveedores' },
+                                    { id: 'ai_analysis', label: 'Análisis IA' }
                                 ].map((tab) => (
                                     <button
                                         key={tab.id}
-                                        onClick={() => setCurrentView(tab.id as ViewMode)}
-                                        className={`px-5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap ${
-                                            currentView === tab.id
-                                                ? 'bg-cyan-600 text-white shadow-md'
-                                                : 'text-slate-500 hover:bg-slate-50'
+                                        onClick={() => {
+                                            if (tab.id === 'ai_analysis') {
+                                                handleAiAnalysis();
+                                            } else {
+                                                setCurrentView(tab.id as ViewMode);
+                                            }
+                                        }}
+                                        className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap border ${
+                                            (currentView === tab.id && tab.id !== 'ai_analysis') || (tab.id === 'ai_analysis' && isAiModalOpen)
+                                                ? 'bg-ui-accent text-[#040d1a] border-ui-accent shadow-[0_0_15px_rgba(0,222,255,0.3)]'
+                                                : 'bg-ui-card text-slate-300 border-ui-border hover:bg-ui-darkest'
                                         }`}
                                     >
                                         {tab.label}
                                     </button>
                                 ))}
                             </div>
+                            
+                            <div>
+                                <label className="px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap text-slate-300 bg-ui-card border border-ui-border shadow-sm hover:bg-transparentest cursor-pointer flex items-center group">
+                                    {isLoading ? (
+                                        <>
+                                            <svg className="animate-spin h-4 w-4 text-slate-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                            </svg>
+                                            <span>Subiendo...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <UploadIcon className="w-4 h-4 mr-2" />
+                                            <span>Subir Datos</span>
+                                        </>
+                                    )}
+                                    <input 
+                                        type="file" 
+                                        className="hidden" 
+                                        onChange={(e) => {
+                                            if (e.target.files && e.target.files.length > 0) {
+                                                handleFileParse(e.target.files[0]);
+                                            }
+                                        }} 
+                                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                                        disabled={isLoading}
+                                    />
+                                </label>
+                            </div>
                         </div>
                         
-                        <div className="max-w-[1600px] mx-auto">
-                            {currentView === 'general' && (
-                                <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                                    {availableNutrients.map((nutrient) => {
-                                        const chartData = multiTrendData
-                                            .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null)
-                                            .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
-                                        if (chartData.length === 0) return null;
-                                        return (
-                                            <ChartCard 
-                                                key={nutrient.key} 
-                                                title={`Tendencia: ${nutrient.label}`} 
-                                                icon={<TrendingUpIcon />}
-                                                onExpand={() => setZoomConfig({ type: 'daily', key: nutrient.key })}
-                                            >
-                                                <TrendChart 
-                                                    data={chartData} 
-                                                    nutrient={nutrient.label} 
-                                                    color={nutrient.color}
-                                                />
-                                            </ChartCard>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                            
-                            {currentView === 'histograms' && (
-                                <div className="animate-fade-in">
-                                    <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
-                                        <ChartBarIcon />
-                                        <span className="ml-2">Histogramas de Frecuencia</span>
+                        <div className="max-w-[1600px] mx-auto p-4 bg-transparent" id="report-content">
+                            {isGeneratingPdf && (
+                                <div className="mb-8 bg-ui-card p-6 rounded-xl shadow-sm border border-ui-border">
+                                    <h1 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">
+                                        Reporte de Calidad: <span className="text-ui-accent">{selectedMaterial}</span>
+                                    </h1>
+                                    <p className="text-slate-400 mb-6 text-sm">Generado el {new Date().toLocaleDateString()}</p>
+                                    <h2 className="text-xl font-bold text-slate-100 mb-4 flex items-center">
+                                        <TableIcon />
+                                        <span className="ml-2">Resumen Estadístico Completo</span>
                                     </h2>
-                                    <ParameterHistograms 
-                                        data={multiTrendData} 
-                                        onExpand={(key) => setZoomConfig({ type: 'histogram', key })}
-                                    />
+                                    <div className="border text-sm max-w-full overflow-auto border-ui-border rounded-xl p-4">
+                                        <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
+                                    </div>
+                                    <div className="mt-8 border-t border-ui-border pt-6">
+                                        <h2 className="text-xl font-bold text-slate-100 mb-2">Vista Actual de Gráficos</h2>
+                                        <p className="text-slate-400 mb-6 text-sm">Mostrando el detalle visual seleccionado al momento de generar el reporte.</p>
+                                    </div>
                                 </div>
                             )}
 
+                            {['general', 'histograms', 'monthly_trends'].includes(currentView) && (
+                                <div className="space-y-8">
+                                    <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                                        {availableNutrients.map((nutrient) => {
+                                            const chartData = multiTrendData
+                                                .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                                                .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                            
+                                            const values = chartData.map(d => d.value);
+                                            const mean = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                            const variance = values.length > 1 ? values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1) : 0;
+                                            const stdDev = Math.sqrt(variance);
+
+                                            const lcl = mean - stdDev;
+                                            const ucl = mean + stdDev;
+                                            const rejectedCount = values.filter(v => v < lcl || v > ucl).length;
+                                            const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
+
+                                            const formattedMean = chartData.length > 0 ? `${mean.toFixed(2)}%` : undefined;
+                                            const formattedSub = chartData.length > 0 ? `DE: ${stdDev.toFixed(2)}%` : undefined;
+                                            const cleanLabel = nutrient.label.replace(' (%)', '');
+                                            
+                                            return (
+                                                <KpiCard
+                                                    key={`kpi-${nutrient.key}`}
+                                                    title={`Prom. ${cleanLabel}`}
+                                                    value={formattedMean}
+                                                    subValue={formattedSub}
+                                                    rejectionRate={rejectionRate}
+                                                    icon={getNutrientIcon(nutrient.key, "w-5 h-5 stroke-[1.5]")}
+                                                    color={nutrient.color || '#0ea5e9'}
+                                                    onClick={() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key })}
+                                                />
+                                            );
+                                        })}
+                                    </div>
+
+                                    {currentView === 'general' && (
+                                        <div className="animate-fade-in mt-8">
+                                            <div className="mb-6 px-1">
+                                                <h2 className="text-xl font-bold text-slate-100">Tendencias de Parámetros</h2>
+                                                <p className="text-slate-400 text-sm mt-1">Valor promedio de cada parámetro a lo largo del tiempo según los filtros actuales.</p>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                {availableNutrients.map((nutrient) => {
+                                                    const chartData = multiTrendData
+                                                        .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                                    
+                                                    if (chartData.length === 0) return null;
+                                                    const cleanLabel = nutrient.label.replace(' (%)', '');
+
+                                                    return (
+                                                        <div key={`trend-${nutrient.key}`} className="relative bg-ui-card border border-ui-border rounded-xl p-5 shadow-lg">
+                                                            <div className="flex items-center space-x-2 border-b border-ui-border/50 pb-3 mb-4">
+                                                                <div className="text-slate-400">
+                                                                    {getNutrientIcon(nutrient.key, "w-5 h-5")}
+                                                                </div>
+                                                                <h3 className="text-[14px] font-bold text-slate-200">Tendencia de {cleanLabel}</h3>
+                                                            </div>
+                                                            <div className="h-[220px]" onClick={() => setZoomConfig({ type: 'daily', key: nutrient.key })}>
+                                                                <TrendChart 
+                                                                    data={chartData} 
+                                                                    nutrient={nutrient.label} 
+                                                                    color={nutrient.color || '#0ea5e9'}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {currentView === 'histograms' && (
+                                        <div className="animate-fade-in mt-8">
+                                            <div className="mb-6 px-1">
+                                                <h2 className="text-xl font-bold text-slate-100">Distribución de Parámetros</h2>
+                                                <p className="text-slate-400 text-sm mt-1">Histograma de cada parámetro en todas las muestras según los filtros actuales.</p>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                {availableNutrients.map((nutrient) => {
+                                                    const chartData = multiTrendData
+                                                        .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                                    
+                                                    if (chartData.length === 0) return null;
+                                                    const cleanLabel = nutrient.label.replace(' (%)', '');
+
+                                                    return (
+                                                        <div key={`hist-${nutrient.key}`} className="relative bg-ui-card border border-ui-border rounded-xl p-5 shadow-lg">
+                                                            <div className="flex items-center space-x-2 border-b border-ui-border/50 pb-3 mb-4">
+                                                                <div className="text-slate-400">
+                                                                    {getNutrientIcon(nutrient.key, "w-5 h-5")}
+                                                                </div>
+                                                                <h3 className="text-[14px] font-bold text-slate-200">Distribución de {cleanLabel}</h3>
+                                                            </div>
+                                                            <div className="h-[220px]" onClick={() => setZoomConfig({ type: 'histogram', key: nutrient.key })}>
+                                                                <HistogramChart 
+                                                                    data={chartData} 
+                                                                    nutrient={nutrient.label} 
+                                                                    color={nutrient.color || '#f97316'}
+                                                                    isCompact={false}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}                                </div>
+                            )}
+
                             {currentView === 'monthly_trends' && (
-                                <div className="animate-fade-in">
-                                    <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
+                                <div className="animate-fade-in mt-8">
+                                    <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
                                         <CalendarIcon />
                                         <span className="ml-2">Promedios Mensuales Consolidados</span>
                                     </h2>
@@ -389,15 +600,29 @@ const App: React.FC = () => {
                                 </div>
                             )}
                             
-                            {currentView === 'statistics' && (
-                                <div className="animate-fade-in">
-                                    <h2 className="text-xl font-bold text-slate-800 mb-6 px-1 flex items-center">
+                            {(currentView === 'statistics' && !isGeneratingPdf) && (
+                                <div className="animate-fade-in mt-8">
+                                    <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
                                         <TableIcon />
                                         <span className="ml-2">Estadísticas Descriptivas</span>
                                     </h2>
-                                    <ChartCard title={`Tabla de Calidad: ${selectedMaterial}`} icon={<TableIcon />}>
-                                        <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
-                                    </ChartCard>
+                <div className="bg-ui-card border text-sm max-w-full overflow-auto border-ui-border rounded-2xl p-6 shadow-sm">
+                    <h3 className="text-slate-300 font-semibold mb-4 text-sm uppercase tracking-widest flex items-center">
+                        <span className="mr-2"><TableIcon /></span> 
+                        Tabla de Calidad: {selectedMaterial}
+                    </h3>
+                    <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
+                </div>
+                                </div>
+                            )}
+
+                            {currentView === 'supplier_quality' && !isGeneratingPdf && (
+                                <div className="animate-fade-in mt-8">
+                                    <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
+                                        <ShieldCheckIcon />
+                                        <span className="ml-2">Evaluación de Proveedores</span>
+                                    </h2>
+                                    <SupplierAnalysis data={multiTrendData} material={selectedMaterial} />
                                 </div>
                             )}
                         </div>

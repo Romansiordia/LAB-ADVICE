@@ -21,38 +21,38 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
             aria-modal="true"
         >
             <div 
-                className="bg-white rounded-lg shadow-xl p-6 m-4 max-w-5xl w-full text-slate-700 relative transform transition-all"
+                className="bg-ui-card rounded-lg shadow-xl p-6 m-4 max-w-5xl w-full text-slate-300 relative transform transition-all"
                 onClick={(e) => e.stopPropagation()}
             >
                 <button 
                     onClick={onClose} 
-                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"
+                    className="absolute top-4 right-4 text-slate-400 hover:text-slate-400"
                     aria-label="Cerrar modal"
                 >
                     <XIcon />
                 </button>
-                <h2 className="text-2xl font-bold text-slate-900 mb-4">Formato de Archivo Requerido</h2>
+                <h2 className="text-2xl font-bold text-slate-100 mb-4">Formato de Archivo Requerido</h2>
                 <p className="mb-4">
                     Para asegurar una correcta visualización, tu archivo (CSV o Excel) debe contener las siguientes columnas en la primera fila (cabeceras). El orden no es estricto, pero los nombres deben coincidir.
                 </p>
 
-                <div className="mb-6 p-4 bg-slate-50 rounded-md">
-                    <h3 className="font-semibold text-cyan-600 mb-2">Notas Importantes:</h3>
+                <div className="mb-6 p-4 bg-ui-darkest rounded-md">
+                    <h3 className="font-semibold text-ui-accent mb-2">Notas Importantes:</h3>
                     <ul className="list-disc list-inside text-sm space-y-1">
-                        <li>Las columnas <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">date</code> y <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">material</code> son <span className="font-bold">obligatorias</span>.</li>
-                         <li>Las columnas <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">subtipo</code>, <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">Cliente</code>, <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">Proveedor</code>, y <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">Origen</code> son <span className="font-bold">opcionales</span>.</li>
-                        <li>El formato de fecha debe ser <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">dd/mm/yyyy</code>. Se aceptan barras (<code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">/</code>) o guiones (<code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">-</code>) como separadores. También se leen correctamente los números de serie de fecha de Excel.</li>
-                        <li>Los nombres de las columnas (cabeceras) no distinguen entre mayúsculas y minúsculas (ej. <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">cliente</code> es igual que <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">Cliente</code>).</li>
-                        <li>Los nombres de las columnas de nutrientes deben coincidir con los "keys" de la tabla de abajo (ej. <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">proteina</code>, <code className="bg-slate-200 text-slate-800 p-1 rounded text-xs">humedad</code>).</li>
+                        <li>Las columnas <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">date</code> y <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">material</code> son <span className="font-bold">obligatorias</span>.</li>
+                         <li>Las columnas <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">subtipo</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Cliente</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Proveedor</code>, y <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Origen</code> son <span className="font-bold">opcionales</span>.</li>
+                        <li>El formato de fecha debe ser <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">dd/mm/yyyy</code>. Se aceptan barras (<code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">/</code>) o guiones (<code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">-</code>) como separadores. También se leen correctamente los números de serie de fecha de Excel.</li>
+                        <li>Los nombres de las columnas (cabeceras) no distinguen entre mayúsculas y minúsculas (ej. <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">cliente</code> es igual que <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Cliente</code>).</li>
+                        <li>Los nombres de las columnas de nutrientes deben coincidir con los "keys" de la tabla de abajo (ej. <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">proteina</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">humedad</code>).</li>
                         <li>Solo necesitas incluir las columnas de los nutrientes que deseas analizar.</li>
                         <li>Las celdas sin valor numérico serán ignoradas.</li>
                     </ul>
                 </div>
 
-                <h3 className="text-lg font-semibold text-slate-900 mb-2">Tabla de Ejemplo:</h3>
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">Tabla de Ejemplo:</h3>
                 <div className="overflow-x-auto rounded-lg border border-slate-300">
                     <table className="min-w-full divide-y divide-slate-300 text-sm">
-                        <thead className="bg-slate-100">
+                        <thead className="bg-ui-dark">
                             <tr>
                                 <th className="px-4 py-2 text-left font-semibold">date</th>
                                 <th className="px-4 py-2 text-left font-semibold">material</th>
@@ -65,7 +65,7 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                                 <th className="px-4 py-2 text-left font-semibold">...</th>
                             </tr>
                         </thead>
-                        <tbody className="bg-white divide-y divide-slate-300">
+                        <tbody className="bg-ui-card divide-y divide-slate-300">
                             <tr>
                                 <td className="px-4 py-2 whitespace-nowrap">26/10/2023</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Soya</td>
@@ -99,7 +99,7 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                  <div className="mt-6 text-right">
                     <button 
                         onClick={onClose} 
-                        className="bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors"
+                        className="bg-ui-accent hover:shadow-[0_0_15px_rgba(0,210,255,0.3)] text-[#040d1a] hover:bg-cyan-700 text-white font-bold py-2 px-4 rounded transition-colors"
                     >
                         Entendido
                     </button>

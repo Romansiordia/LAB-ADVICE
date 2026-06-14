@@ -20,7 +20,7 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
         return NUTRIENTS.map(nutrient => {
             const values = data
                 .map(d => d[nutrient.key])
-                .filter((v): v is number => typeof v === 'number' && !isNaN(v));
+                .filter((v): v is number => typeof v === 'number' && !isNaN(v) && v !== 0);
 
             if (values.length === 0) return null;
 
@@ -37,11 +37,13 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
 
             // Validation Logic
             let status: 'normal' | 'low' | 'high' | 'unknown' = 'unknown';
-            let refRangeString = '-';
+            
+            const lcl = mean - stdDev;
+            const ucl = mean + stdDev;
+            let refRangeString = `${lcl.toFixed(2)} - ${ucl.toFixed(2)}`;
 
             if (refValues && refValues[nutrient.key]) {
                 const range = refValues[nutrient.key];
-                refRangeString = `${range.min} - ${range.max}`;
                 
                 if (mean < range.min) {
                     status = 'low';
@@ -97,18 +99,18 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
         URL.revokeObjectURL(url);
     };
 
-    if (!statsData.length) return <div className="flex items-center justify-center h-full text-slate-500">No hay datos suficientes para calcular estadísticas.</div>;
+    if (!statsData.length) return <div className="flex items-center justify-center h-full text-slate-400">No hay datos suficientes para calcular estadísticas.</div>;
 
     const getStatusBadge = (status: string) => {
         switch (status) {
             case 'normal':
-                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800">Normal</span>;
+                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ui-success/20 text-ui-success">Normal</span>;
             case 'low':
-                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Bajo</span>;
+                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ui-warning/20 text-ui-warning">Bajo</span>;
             case 'high':
-                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800">Alto</span>;
+                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ui-warning/20 text-ui-warning">Alto</span>;
             default:
-                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-500">N/A</span>;
+                return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ui-dark text-slate-400">N/A</span>;
         }
     };
 
@@ -117,38 +119,38 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
             <div className="flex justify-end mb-2">
                  <button 
                     onClick={handleDownloadCsv}
-                    className="flex items-center text-xs bg-cyan-50 hover:bg-cyan-100 text-cyan-700 py-1.5 px-3 rounded transition-colors border border-cyan-200"
+                    className="flex items-center text-xs bg-ui-accent/10 text-ui-accent hover:bg-ui-accent/20 text-ui-accent py-1.5 px-3 rounded transition-colors border border-ui-accent/30"
                     title="Descargar tabla en CSV"
                 >
                     <DownloadIcon />
                     <span className="ml-1 font-medium">Descargar CSV</span>
                 </button>
             </div>
-            <div className="overflow-auto flex-1 border border-slate-200 rounded-lg">
-                <table className="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead className="bg-slate-50 sticky top-0 z-10 shadow-sm">
+            <div className="overflow-auto flex-1 border border-ui-border rounded-lg">
+                <table className="min-w-full divide-y divide-ui-border text-sm">
+                    <thead className="bg-ui-darkest sticky top-0 z-10 shadow-sm">
                         <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-slate-600">Parámetro</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-600">Promedio</th>
-                            <th className="px-4 py-3 text-center font-semibold text-slate-600">Rango Ref.</th>
-                            <th className="px-4 py-3 text-center font-semibold text-slate-600">Estado</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-600">Mín</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-600">Max</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-600">DE</th>
-                             <th className="px-4 py-3 text-right font-semibold text-slate-600">N</th>
+                            <th className="px-4 py-3 text-left font-semibold text-slate-400">Parámetro</th>
+                            <th className="px-4 py-3 text-right font-semibold text-slate-400">Promedio</th>
+                            <th className="px-4 py-3 text-center font-semibold text-slate-400">Rango Ref.</th>
+                            <th className="px-4 py-3 text-center font-semibold text-slate-400">Estado</th>
+                            <th className="px-4 py-3 text-right font-semibold text-slate-400">Mín</th>
+                            <th className="px-4 py-3 text-right font-semibold text-slate-400">Max</th>
+                            <th className="px-4 py-3 text-right font-semibold text-slate-400">DE</th>
+                             <th className="px-4 py-3 text-right font-semibold text-slate-400">N</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
+                    <tbody className="divide-y divide-ui-border bg-ui-card">
                         {statsData.map((row, idx) => (
-                            <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                                <td className="px-4 py-2 font-medium text-slate-700">{row!.label}</td>
-                                <td className="px-4 py-2 text-right font-semibold text-slate-800">{row!.mean}</td>
-                                <td className="px-4 py-2 text-center text-slate-500 text-xs">{row!.refRangeString}</td>
+                            <tr key={idx} className="hover:bg-ui-darkest transition-colors">
+                                <td className="px-4 py-2 font-medium text-slate-300">{row!.label}</td>
+                                <td className="px-4 py-2 text-right font-semibold text-slate-100">{row!.mean}</td>
+                                <td className="px-4 py-2 text-center text-slate-400 text-xs">{row!.refRangeString}</td>
                                 <td className="px-4 py-2 text-center">{getStatusBadge(row!.status)}</td>
-                                <td className="px-4 py-2 text-right text-slate-600">{row!.min}</td>
-                                <td className="px-4 py-2 text-right text-slate-600">{row!.max}</td>
-                                <td className="px-4 py-2 text-right text-slate-600">{row!.stdDev}</td>
-                                <td className="px-4 py-2 text-right text-slate-600">{row!.count}</td>
+                                <td className="px-4 py-2 text-right text-slate-400">{row!.min}</td>
+                                <td className="px-4 py-2 text-right text-slate-400">{row!.max}</td>
+                                <td className="px-4 py-2 text-right text-slate-400">{row!.stdDev}</td>
+                                <td className="px-4 py-2 text-right text-slate-400">{row!.count}</td>
                             </tr>
                         ))}
                     </tbody>

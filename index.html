@@ -46,30 +46,63 @@
     font-weight: 600;
 }
 
-/* Custom color palette for Tailwind */
-tailwind.config = {
-  theme: {
-    extend: {
-      colors: {
-        cyan: {
-          50: '#ecfeff',
-          100: '#cffafe',
-          200: '#a5f3fd',
-          300: '#67e8f9',
-          400: '#22d3ee',
-          500: '#06b6d4',
-          600: '#0891b2',
-          700: '#0e7490',
-          800: '#155e75',
-          900: '#164e63',
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #061427;
+}
+::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00d2ff;
+}
+</style>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Inter', 'sans-serif'],
+          mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
         },
+        colors: {
+          ui: {
+            border: '#1f3049',
+            card: '#132641',
+            darkest: '#0c1524',
+            dark: '#15406f',
+            bg: '#163c65',
+            accent: '#00deff',
+            success: '#10b981',
+            warning: '#f59e0b'
+          },
+          cyan: {
+            50: '#ecfeff',
+            100: '#cffafe',
+            200: '#a5f3fd',
+            300: '#67e8f9',
+            400: '#22d3ee',
+            500: '#06b6d4',
+            600: '#0891b2',
+            700: '#0e7490',
+            800: '#155e75',
+            900: '#164e63',
+          },
+        }
       }
     }
   }
-}
-</style>
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/index.css">
 </head>
-  <body class="bg-slate-100 text-slate-800">
+  <body class="text-slate-100 bg-ui-bg" style="min-height: 100vh;">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
