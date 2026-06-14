@@ -42,18 +42,19 @@ export const ParameterMonthlyTrends: React.FC<ParameterMonthlyTrendsProps> = ({ 
     }
 
     return (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             {NUTRIENTS.map((nutrient) => {
                 const chartData = getMonthlyData(data, nutrient.key);
 
                 if (chartData.length === 0) return null;
 
+                const cleanLabel = nutrient.label.replace(' (%)', '');
                 return (
                     <KpiCard
                         key={`monthly-${nutrient.key}`}
-                        title={`Promedio: ${nutrient.label}`}
+                        title={`Prom. ${cleanLabel}`}
                         value={chartData.length > 0 ? `${chartData[chartData.length - 1].value.toFixed(2)}%` : undefined}
-                        icon={getNutrientIcon(nutrient.key, "w-8 h-8")}
+                        icon={getNutrientIcon(nutrient.key, "w-4 h-4 text-white")}
                         color={nutrient.color || '#0ea5e9'}
                         onClick={onExpand ? () => onExpand(nutrient.key) : undefined}
                     />

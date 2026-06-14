@@ -476,7 +476,7 @@ const App: React.FC = () => {
 
                             {['general', 'histograms', 'monthly_trends'].includes(currentView) && (
                                 <div className="space-y-8">
-                                    <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                                    <div className="animate-fade-in grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                         {availableNutrients.map((nutrient) => {
                                             const chartData = multiTrendData
                                                 .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
@@ -503,7 +503,7 @@ const App: React.FC = () => {
                                                     value={formattedMean}
                                                     subValue={formattedSub}
                                                     rejectionRate={rejectionRate}
-                                                    icon={getNutrientIcon(nutrient.key, "w-5 h-5 stroke-[1.5]")}
+                                                    icon={getNutrientIcon(nutrient.key, "w-4 h-4 text-white stroke-[2]")}
                                                     color={nutrient.color || '#0ea5e9'}
                                                     onClick={() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key })}
                                                 />
