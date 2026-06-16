@@ -412,6 +412,7 @@ const App: React.FC = () => {
                             <div className="bg-transparent rounded-xl flex flex-wrap gap-2">
                                 {[
                                     { id: 'general', label: 'Tendencias' },
+                                    { id: 'monthly_trends', label: 'Tendencias Mensuales' },
                                     { id: 'histograms', label: 'Distribución' },
                                     { id: 'statistics', label: 'Estadísticas' },
                                     { id: 'supplier_quality', label: 'Proveedores' }
