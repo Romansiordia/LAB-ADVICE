@@ -414,22 +414,17 @@ const App: React.FC = () => {
                                     { id: 'general', label: 'Tendencias' },
                                     { id: 'histograms', label: 'Distribución' },
                                     { id: 'statistics', label: 'Estadísticas' },
-                                    { id: 'supplier_quality', label: 'Proveedores' },
-                                    { id: 'ai_analysis', label: 'Análisis IA' }
+                                    { id: 'supplier_quality', label: 'Proveedores' }
                                 ].map((tab) => (
                                     <button
                                         key={tab.id}
                                         onClick={() => {
-                                            if (tab.id === 'ai_analysis') {
-                                                handleAiAnalysis();
-                                            } else {
-                                                startTransition(() => {
-                                                    setCurrentView(tab.id as ViewMode);
-                                                });
-                                            }
+                                            startTransition(() => {
+                                                setCurrentView(tab.id as ViewMode);
+                                            });
                                         }}
                                         className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap border ${
-                                            (currentView === tab.id && tab.id !== 'ai_analysis') || (tab.id === 'ai_analysis' && isAiModalOpen)
+                                            currentView === tab.id
                                                 ? 'bg-ui-accent text-[#040d1a] border-ui-accent shadow-[0_0_15px_rgba(0,222,255,0.3)]'
                                                 : 'bg-ui-card text-slate-300 border-ui-border hover:bg-ui-darkest'
                                         }`}

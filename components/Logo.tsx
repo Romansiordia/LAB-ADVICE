@@ -9,8 +9,8 @@ export const Logo: React.FC<LogoProps> = ({ showMaterial, as: Component = 'span'
     return (
         <div className="flex items-center w-full">
             <img 
-                src="/logo-spectrametrics.png" 
-                alt="SpectraMetrics Logo" 
+                src="/logo-labadvice.png" 
+                alt="Labadvice Logo" 
                 className="h-16 md:h-20 w-auto object-contain max-w-[250px]"
             />
             {showMaterial ? (
