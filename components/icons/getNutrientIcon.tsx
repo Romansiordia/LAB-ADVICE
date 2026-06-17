@@ -8,7 +8,12 @@ import {
     Wheat, 
     Bone, 
     Atom,
-    Activity
+    Activity,
+    Skull,
+    ShieldAlert,
+    AlertTriangle,
+    Biohazard,
+    Flame
 } from 'lucide-react';
 
 export const getNutrientIcon = (key: string, className?: string) => {
@@ -39,6 +44,19 @@ export const getNutrientIcon = (key: string, className?: string) => {
         case 'fosforo':
         case 'fósforo':
             return <Atom className={className} />;
+        case 'aflatoxina':
+            return <Skull className={className} />;
+        case 'ocratoxina':
+            return <ShieldAlert className={className} />;
+        case 'zearalenona':
+            return <AlertTriangle className={className} />;
+        case 'fumonisina':
+            return <Biohazard className={className} />;
+        case 'vomitoxina':
+            return <Flame className={className} />;
+        case 'toxina_t2':
+        case 'toxina t2':
+            return <ShieldAlert className={className} />;
         default: 
             return <Activity className={className} />;
     }

@@ -77,6 +77,12 @@ const generateData = (): RawMaterialData[] => {
                 fibra: parseFloat((baseFibra + (Math.random() - 0.5)).toFixed(2)),
                 ceniza: parseFloat((5 + Math.random()).toFixed(2)),
                 almidon: material === 'Maiz' ? parseFloat((65 + (Math.random() - 0.5) * 5).toFixed(2)) : undefined,
+                aflatoxina: parseFloat((Math.random() * 8 + 1).toFixed(2)),
+                ocratoxina: parseFloat((Math.random() * 4 + 0.5).toFixed(2)),
+                zearalenona: parseFloat((Math.random() * 80 + 20).toFixed(2)),
+                fumonisina: parseFloat((Math.random() * 1.5 + 0.2).toFixed(2)),
+                vomitoxina: parseFloat((Math.random() * 1.2 + 0.1).toFixed(2)),
+                toxina_t2: parseFloat((Math.random() * 30 + 5).toFixed(2))
             });
         }
     }

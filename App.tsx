@@ -153,6 +153,7 @@ const App: React.FC = () => {
     const firstSampleMaterial = SAMPLE_DATA.length > 0 ? SAMPLE_DATA[0].material : '';
     const [selectedMaterial, setSelectedMaterial] = useState<string>(firstSampleMaterial);
     const [currentView, setCurrentView] = useState<ViewMode>('general');
+    const [selectedCategory, setSelectedCategory] = useState<'nutrients' | 'mycotoxins'>('nutrients');
     
     const [selectedSubtipo, setSelectedSubtipo] = useState<string>(ALL_FILTER);
     const [selectedCliente, setSelectedCliente] = useState<string>(ALL_FILTER);
@@ -236,11 +237,18 @@ const App: React.FC = () => {
     }, [rawData, selectedMaterial, selectedSubtipo, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
 
     const availableMaterials = useMemo(() => [...new Set(rawData.map(d => d.material))], [rawData]);
-    const availableNutrients = useMemo(() => {
+    const availableNutrientsFull = useMemo(() => {
         if (rawData.length === 0) return [];
         const materialSample = rawData.find(d => d.material === selectedMaterial) || rawData[0];
         return materialSample ? NUTRIENTS.filter(n => materialSample[n.key] !== undefined) : [];
     }, [rawData, selectedMaterial]);
+
+    const availableNutrients = useMemo(() => {
+        if (isGeneratingPdf) return availableNutrientsFull;
+        return availableNutrientsFull.filter(n => (n.category || 'nutrients') === selectedCategory);
+    }, [availableNutrientsFull, selectedCategory, isGeneratingPdf]);
+
+    const activeCategoryNutrients = availableNutrients;
     
     const createFilterOptions = (key: keyof RawMaterialData) => useMemo(() => {
         const values = new Set(rawData.filter(d => d.material === selectedMaterial && d[key]).map(d => d[key] as string));
@@ -489,8 +497,33 @@ const App: React.FC = () => {
 
                             {(isGeneratingPdf || ['general', 'histograms', 'monthly_trends'].includes(currentView)) && (
                                 <div className="space-y-8">
+                                    {!isGeneratingPdf && (
+                                        <div className="flex bg-ui-card shrink-0 p-1 rounded-xl border border-ui-border max-w-sm sm:max-w-md">
+                                            <button
+                                                onClick={() => setSelectedCategory('nutrients')}
+                                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all text-center uppercase tracking-wider ${
+                                                    selectedCategory === 'nutrients'
+                                                        ? 'bg-ui-accent text-[#040d1a] shadow-sm'
+                                                        : 'text-slate-400 hover:text-slate-200'
+                                                }`}
+                                            >
+                                                Calidad Nutricional
+                                            </button>
+                                            <button
+                                                onClick={() => setSelectedCategory('mycotoxins')}
+                                                className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all text-center uppercase tracking-wider ${
+                                                    selectedCategory === 'mycotoxins'
+                                                        ? 'bg-ui-accent text-[#040d1a] shadow-sm'
+                                                        : 'text-slate-400 hover:text-slate-200'
+                                                }`}
+                                            >
+                                                Micotoxinas
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <div className="animate-fade-in grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                        {availableNutrients.map((nutrient) => {
+                                        {activeCategoryNutrients.map((nutrient) => {
                                             const chartData = multiTrendData
                                                 .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
                                                 .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
@@ -505,9 +538,23 @@ const App: React.FC = () => {
                                             const rejectedCount = values.filter(v => v < lcl || v > ucl).length;
                                             const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
 
-                                            const formattedMean = chartData.length > 0 ? `${mean.toFixed(2)}%` : undefined;
-                                            const formattedSub = chartData.length > 0 ? `DE: ${stdDev.toFixed(2)}%` : undefined;
-                                            const cleanLabel = nutrient.label.replace(' (%)', '');
+                                            const unit = nutrient.label.includes('%') 
+                                                ? '%' 
+                                                : nutrient.label.includes('ppb') 
+                                                ? ' ppb' 
+                                                : nutrient.label.includes('ppm') 
+                                                ? ' ppm' 
+                                                : nutrient.label.includes('µm') 
+                                                ? ' µm' 
+                                                : '';
+
+                                            const formattedMean = chartData.length > 0 ? `${mean.toFixed(2)}${unit}` : undefined;
+                                            const formattedSub = chartData.length > 0 ? `DE: ${stdDev.toFixed(2)}${unit}` : undefined;
+                                            const cleanLabel = nutrient.label
+                                                .replace(' (%)', '')
+                                                .replace(' (ppb)', '')
+                                                .replace(' (ppm)', '')
+                                                .replace(' (µm)', '');
                                             
                                             return (
                                                 <KpiCard
@@ -537,7 +584,7 @@ const App: React.FC = () => {
                                                         .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
                                                     
                                                     if (chartData.length === 0) return null;
-                                                    const cleanLabel = nutrient.label.replace(' (%)', '');
+                                                    const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
 
                                                     return (
                                                         <div key={`trend-${nutrient.key}`} className="relative bg-ui-card border border-ui-border rounded-xl p-5 shadow-lg">
@@ -574,7 +621,7 @@ const App: React.FC = () => {
                                                         .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
                                                     
                                                     if (chartData.length === 0) return null;
-                                                    const cleanLabel = nutrient.label.replace(' (%)', '');
+                                                    const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
 
                                                     return (
                                                         <div key={`hist-${nutrient.key}`} className="relative bg-ui-card border border-ui-border rounded-xl p-5 shadow-lg">
@@ -624,7 +671,7 @@ const App: React.FC = () => {
                         <span className="mr-2"><TableIcon /></span> 
                         Tabla de Calidad: {selectedMaterial}
                     </h3>
-                    <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
+                    <NutrientStatsTable data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
                 </div>
                                 </div>
                             )}
@@ -635,7 +682,7 @@ const App: React.FC = () => {
                                         <ShieldCheckIcon />
                                         <span className="ml-2">Evaluación de Proveedores</span>
                                     </h2>
-                                    <SupplierAnalysis data={multiTrendData} material={selectedMaterial} />
+                                    <SupplierAnalysis data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
                                 </div>
                             )}
                         </div>

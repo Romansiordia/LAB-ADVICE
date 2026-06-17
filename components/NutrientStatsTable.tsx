@@ -8,16 +8,21 @@ import { DownloadIcon } from './icons/DownloadIcon';
 interface NutrientStatsTableProps {
     data: RawMaterialData[];
     material?: string;
+    category?: 'nutrients' | 'mycotoxins';
 }
 
-export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, material }) => {
+export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, material, category }) => {
     
     const statsData = useMemo(() => {
         if (!data || data.length === 0) return [];
 
         const refValues = material ? REFERENCE_VALUES[material] : null;
 
-        return NUTRIENTS.map(nutrient => {
+        const filteredNutrients = category 
+            ? NUTRIENTS.filter(n => (n.category || 'nutrients') === category)
+            : NUTRIENTS;
+
+        return filteredNutrients.map(nutrient => {
             const values = data
                 .map(d => d[nutrient.key])
                 .filter((v): v is number => typeof v === 'number' && !isNaN(v) && v !== 0);

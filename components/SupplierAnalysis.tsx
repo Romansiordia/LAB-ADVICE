@@ -6,9 +6,10 @@ import { AlertTriangleIcon } from 'lucide-react';
 interface SupplierAnalysisProps {
     data: RawMaterialData[];
     material: string;
+    category?: 'nutrients' | 'mycotoxins';
 }
 
-export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, material }) => {
+export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, material, category }) => {
     
     // Group data by supplier
     const suppliersData = useMemo(() => {
@@ -24,8 +25,12 @@ export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, materi
         const suppliers: string[] = Array.from(new Set(data.filter(d => !!d.Proveedor).map(d => String(d.Proveedor))));
         if (suppliers.length === 0) return null;
 
-        // Ensure we only look at nutrients that have values in this dataset
-        const activeNutrients = NUTRIENTS.filter(n => data.some(d => typeof d[n.key] === 'number' && d[n.key] !== 0));
+        // Filter and ensure we only look at nutrients that have values in this dataset
+        const filteredNutrientsConfig = category 
+            ? NUTRIENTS.filter(n => (n.category || 'nutrients') === category)
+            : NUTRIENTS;
+
+        const activeNutrients = filteredNutrientsConfig.filter(n => data.some(d => typeof d[n.key] === 'number' && d[n.key] !== 0));
 
         suppliers.forEach(supplier => {
             const sData = data.filter(d => d.Proveedor === supplier);
