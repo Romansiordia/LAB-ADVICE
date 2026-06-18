@@ -248,8 +248,7 @@ const App: React.FC = () => {
     const availableMaterials = useMemo(() => [...new Set(rawData.map(d => d.material))], [rawData]);
     const availableNutrientsFull = useMemo(() => {
         if (rawData.length === 0) return [];
-        const materialSample = rawData.find(d => d.material === selectedMaterial) || rawData[0];
-        return materialSample ? NUTRIENTS.filter(n => materialSample[n.key] !== undefined) : [];
+        return NUTRIENTS.filter(n => rawData.some(d => d.material === selectedMaterial && d[n.key] !== undefined));
     }, [rawData, selectedMaterial]);
 
     const availableNutrients = useMemo(() => {
