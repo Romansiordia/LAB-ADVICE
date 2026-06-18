@@ -47,6 +47,10 @@ interface SidebarProps {
     setSelectedSubtipo: (subtipo: string) => void;
     availableSubtipos: string[];
 
+    selectedLote: string;
+    setSelectedLote: (lote: string) => void;
+    availableLotes: string[];
+
     selectedCliente: string;
     setSelectedCliente: (cliente: string) => void;
     availableClientes: string[];
@@ -81,6 +85,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     selectedSubtipo,
     setSelectedSubtipo,
     availableSubtipos,
+    selectedLote,
+    setSelectedLote,
+    availableLotes,
     selectedCliente,
     setSelectedCliente,
     availableClientes,
@@ -176,6 +183,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 value={selectedSubtipo}
                                 onChange={setSelectedSubtipo}
                                 options={availableSubtipos}
+                            />
+                            <FilterSelect
+                                id="lote-select"
+                                label="Lote"
+                                value={selectedLote}
+                                onChange={setSelectedLote}
+                                options={availableLotes}
                             />
                             <FilterSelect
                                 id="cliente-select"

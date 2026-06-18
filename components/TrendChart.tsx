@@ -3,11 +3,40 @@ import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
 
 interface TrendChartProps {
-    data: { date: string, value: number }[];
+    data: { date: string, value: number, noId?: string, lote?: string }[];
     nutrient: string;
     color?: string;
     isCompact?: boolean;
 }
+
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        const dataItem = payload[0].payload;
+        return (
+            <div className="bg-[#132641] border border-white/10 p-3 rounded-lg shadow-xl text-xs space-y-1.5 min-w-[160px]">
+                <p className="text-slate-100 font-bold border-b border-white/10 pb-1 mb-1">
+                    {isNaN(Date.parse(label)) ? label : new Date(label).toLocaleDateString('es-ES', { dateStyle: 'medium' })}
+                </p>
+                {dataItem.noId && (
+                    <p className="text-slate-300">
+                        <span className="font-semibold text-ui-accent">ID Muestra:</span>{' '}
+                        <span className="font-mono bg-ui-darkest/40 px-1 py-0.5 rounded text-[11px] text-slate-100">{dataItem.noId}</span>
+                    </p>
+                )}
+                {dataItem.lote && (
+                    <p className="text-slate-300">
+                        <span className="font-semibold text-slate-400">Lote:</span>{' '}
+                        <span className="font-mono bg-ui-darkest/40 px-1 py-0.5 rounded text-[11px] text-slate-100">{dataItem.lote}</span>
+                    </p>
+                )}
+                <p className="text-slate-100 font-semibold mt-1">
+                    {payload[0].name}: <span className="text-ui-accent text-sm font-bold">{dataItem.value}</span>
+                </p>
+            </div>
+        );
+    }
+    return null;
+};
 
 export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, isCompact = false }) => {
     const stats = useMemo(() => {
@@ -67,17 +96,7 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, i
                     hide={isCompact} 
                 />
                 
-                <Tooltip 
-                    contentStyle={{ 
-                        backgroundColor: '#132641', 
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                        borderRadius: '8px',
-                        fontSize: '12px'
-                    }} 
-                    labelStyle={{ color: '#f1f5f9', fontWeight: 'bold' }}
-                    labelFormatter={(label) => new Date(label).toLocaleDateString('es-ES', { dateStyle: 'medium' })}
-                />
+                <Tooltip content={<CustomTooltip />} />
                 {!isCompact && <Legend verticalAlign="top" height={36} formatter={() => `Tendencia Diaria (${nutrient})`} />}
                 {!isCompact && (
                     <Brush 

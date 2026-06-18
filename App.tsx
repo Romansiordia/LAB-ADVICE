@@ -156,6 +156,7 @@ const App: React.FC = () => {
     const [selectedCategory, setSelectedCategory] = useState<'nutrients' | 'mycotoxins'>('nutrients');
     
     const [selectedSubtipo, setSelectedSubtipo] = useState<string>(ALL_FILTER);
+    const [selectedLote, setSelectedLote] = useState<string>(ALL_FILTER);
     const [selectedCliente, setSelectedCliente] = useState<string>(ALL_FILTER);
     const [selectedProveedor, setSelectedProveedor] = useState<string>(ALL_FILTER);
     const [selectedOrigen, setSelectedOrigen] = useState<string>(ALL_FILTER);
@@ -239,13 +240,14 @@ const App: React.FC = () => {
             const itemDateStr = d.date.substring(0, 10);
             return d.material === selectedMaterial && 
                 (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
+                (selectedLote === ALL_FILTER || d.lote === selectedLote) &&
                 (selectedCliente === ALL_FILTER || d.Cliente === selectedCliente) &&
                 (selectedProveedor === ALL_FILTER || d.Proveedor === selectedProveedor) &&
                 (selectedOrigen === ALL_FILTER || d.Origen === selectedOrigen) &&
                 (!startDate || itemDateStr >= startDate) &&
                 (!endDate || itemDateStr <= endDate)
         });
-    }, [rawData, selectedMaterial, selectedSubtipo, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
+    }, [rawData, selectedMaterial, selectedSubtipo, selectedLote, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
 
     const availableMaterials = useMemo(() => [...new Set(rawData.map(d => d.material))], [rawData]);
     const availableNutrientsFull = useMemo(() => {
@@ -266,6 +268,7 @@ const App: React.FC = () => {
     }, [rawData, selectedMaterial]);
     
     const availableSubtipos = createFilterOptions('subtipo');
+    const availableLotes = createFilterOptions('lote');
     const availableClientes = createFilterOptions('Cliente');
     const availableProveedores = createFilterOptions('Proveedor');
     const availableOrigenes = createFilterOptions('Origen');
@@ -298,7 +301,7 @@ const App: React.FC = () => {
         if (zoomConfig.type === 'daily' || zoomConfig.type === 'histogram') {
             const data = multiTrendData
                 .filter(d => d[zoomConfig.key] !== undefined && d[zoomConfig.key] !== null && d[zoomConfig.key] !== '' && Number(d[zoomConfig.key]) !== 0)
-                .map(d => ({ date: d.date, value: Number(d[zoomConfig.key]) }));
+                .map(d => ({ date: d.date, value: Number(d[zoomConfig.key]), noId: d.noId, lote: d.lote }));
             return { config, data };
         } else {
             const data = getMonthlyData(multiTrendData, zoomConfig.key);
@@ -321,6 +324,9 @@ const App: React.FC = () => {
                 selectedSubtipo={selectedSubtipo}
                 setSelectedSubtipo={setSelectedSubtipo}
                 availableSubtipos={availableSubtipos}
+                selectedLote={selectedLote}
+                setSelectedLote={setSelectedLote}
+                availableLotes={availableLotes}
                 selectedCliente={selectedCliente}
                 setSelectedCliente={setSelectedCliente}
                 availableClientes={availableClientes}
@@ -536,7 +542,7 @@ const App: React.FC = () => {
                                         {activeCategoryNutrients.map((nutrient) => {
                                             const chartData = multiTrendData
                                                 .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
-                                                .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                                .map(d => ({ date: d.date, value: Number(d[nutrient.key]), noId: d.noId, lote: d.lote }));
                                             
                                             const values = chartData.map(d => d.value);
                                             const mean = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
@@ -591,7 +597,7 @@ const App: React.FC = () => {
                                                 {availableNutrients.map((nutrient) => {
                                                     const chartData = multiTrendData
                                                         .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
-                                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]), noId: d.noId, lote: d.lote }));
                                                     
                                                     if (chartData.length === 0) return null;
                                                     const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
@@ -628,7 +634,7 @@ const App: React.FC = () => {
                                                 {availableNutrients.map((nutrient) => {
                                                     const chartData = multiTrendData
                                                         .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
-                                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]) }));
+                                                        .map(d => ({ date: d.date, value: Number(d[nutrient.key]), noId: d.noId, lote: d.lote }));
                                                     
                                                     if (chartData.length === 0) return null;
                                                     const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');

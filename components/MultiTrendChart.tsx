@@ -8,6 +8,39 @@ interface MultiTrendChartProps {
     activeNutrients: string[];
 }
 
+const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+        const dataItem = payload[0].payload;
+        return (
+            <div className="bg-[#132641] border border-white/10 p-3 rounded-lg shadow-xl text-xs space-y-1.5 min-w-[160px]">
+                <p className="text-slate-100 font-bold border-b border-white/10 pb-1 mb-1">
+                    {isNaN(Date.parse(label)) ? label : new Date(label).toLocaleDateString('es-ES', { dateStyle: 'medium' })}
+                </p>
+                {dataItem.noId && (
+                    <p className="text-slate-300">
+                        <span className="font-semibold text-ui-accent">ID Muestra:</span>{' '}
+                        <span className="font-mono bg-ui-darkest/40 px-1 py-0.5 rounded text-[11px] text-slate-100">{dataItem.noId}</span>
+                    </p>
+                )}
+                {dataItem.lote && (
+                    <p className="text-slate-300">
+                        <span className="font-semibold text-slate-400">Lote:</span>{' '}
+                        <span className="font-mono bg-ui-darkest/40 px-1 py-0.5 rounded text-[11px] text-slate-100">{dataItem.lote}</span>
+                    </p>
+                )}
+                <div className="space-y-1 mt-2 pt-1 border-t border-white/5">
+                    {payload.map((p: any) => (
+                        <p key={p.name} className="font-semibold" style={{ color: p.color || p.stroke }}>
+                            {p.name}: <span className="text-slate-100 font-bold">{p.value}</span>
+                        </p>
+                    ))}
+                </div>
+            </div>
+        );
+    }
+    return null;
+};
+
 export const MultiTrendChart: React.FC<MultiTrendChartProps> = ({ data, activeNutrients }) => {
     if (!data || data.length === 0) {
         return <div className="flex items-center justify-center h-full text-slate-400">No hay datos disponibles para esta selección.</div>;
@@ -35,14 +68,7 @@ export const MultiTrendChart: React.FC<MultiTrendChartProps> = ({ data, activeNu
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
                 <XAxis dataKey="date" tickFormatter={formatDate} stroke="#64748b" fontSize={12} />
                 <YAxis stroke="#64748b" fontSize={12} domain={['auto', 'auto']} />
-                <Tooltip 
-                    contentStyle={{ 
-                        backgroundColor: '#132641', 
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
-                    }} 
-                    labelStyle={{ color: '#f1f5f9' }}
-                />
+                <Tooltip content={<CustomTooltip />} />
                 <Legend verticalAlign="top" height={36} />
                 <Brush 
                     dataKey="date" 

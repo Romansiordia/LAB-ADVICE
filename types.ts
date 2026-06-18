@@ -13,6 +13,8 @@ export interface RawMaterialData {
 export interface ChartDataPoint {
     date: string;
     value: number;
+    noId?: string;
+    lote?: string;
 }
 
 export interface HistogramBin {
