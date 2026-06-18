@@ -203,8 +203,17 @@ const App: React.FC = () => {
                             Origen: row.origen,
                         };
                         NUTRIENTS.forEach(nutrient => {
-                            const value = parseFloat(row[nutrient.key]);
-                            if (!isNaN(value)) { newRow[nutrient.key] = value; }
+                            const rawValue = row[nutrient.key];
+                            if (rawValue !== undefined && rawValue !== null) {
+                                const strVal = String(rawValue).trim();
+                                if (strVal !== '' && !strVal.includes('<') && !strVal.includes('>') && !strVal.includes('...') && !strVal.includes('…')) {
+                                    const cleaned = strVal.replace(/(?:%|ppm|ppb)\s*$/i, '').replace(',', '.').trim();
+                                    const parsed = parseFloat(cleaned);
+                                    if (!isNaN(parsed) && isFinite(parsed) && /^-?\d*\.?\d+$/.test(cleaned)) {
+                                        newRow[nutrient.key] = parsed;
+                                    }
+                                }
+                            }
                         });
                         return newRow;
                     })
