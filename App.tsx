@@ -195,9 +195,11 @@ const App: React.FC = () => {
                         const dateObj = parseDateDDMMYYYY(row.date || row.fecha);
                         if (!dateObj) return null;
                         const newRow: RawMaterialData = {
+                            noId: row['no id'] || row['noid'] || row['no_id'] || row['no. id'] || row['no.id'] || row['id'] || row['no_ id'] || row['id muestra'] || row['id_muestra'],
                             date: dateObj.toISOString(),
                             material: row.material || 'Desconocido',
                             subtipo: row.subtipo,
+                            lote: row.lote || row.batch,
                             Cliente: row.cliente,
                             Proveedor: row.proveedor,
                             Origen: row.origen,

@@ -64,10 +64,14 @@ const generateData = (): RawMaterialData[] => {
                     origen = 'N/A';
             }
 
+            const randomIdNum = Math.floor(1000 + Math.random() * 9000);
+            const randomLoteNum = Math.floor(100 + Math.random() * 900);
             data.push({
+                noId: `ID-${randomIdNum}`,
                 date: new Date(d).toISOString(),
                 material: material,
                 subtipo: subtipo,
+                lote: `LT-${randomLoteNum}`,
                 Cliente: cliente,
                 Proveedor: proveedor,
                 Origen: origen,

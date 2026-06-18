@@ -27,8 +27,10 @@ export const DataTable: React.FC<DataTableProps> = ({ data, nutrient }) => {
                 <table className="min-w-full divide-y divide-gray-700">
                     <thead className="bg-gray-700 sticky top-0">
                         <tr>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">No Id</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Fecha</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Subtipo</th>
+                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Lote</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Materia Prima</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Cliente</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">Proveedor</th>
@@ -39,8 +41,10 @@ export const DataTable: React.FC<DataTableProps> = ({ data, nutrient }) => {
                     <tbody className="bg-gray-800 divide-y divide-gray-700">
                         {data.slice(0, 50).map((item, index) => (
                             <tr key={index} className="hover:bg-gray-700/50">
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">{item.noId || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{formatDate(item.date)}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.subtipo || '-'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">{item.lote || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.material}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.Cliente || '-'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">{item.Proveedor || '-'}</td>

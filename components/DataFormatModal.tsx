@@ -11,7 +11,7 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
     if (!isOpen) return null;
 
     const nutrientHeaders = NUTRIENTS.map(n => n.key);
-    const otherHeaders = ['subtipo', 'Cliente', 'Proveedor', 'Origen'];
+    const otherHeaders = ['Cliente', 'Proveedor', 'Origen'];
 
     return (
         <div 
@@ -40,26 +40,29 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                     <h3 className="font-semibold text-ui-accent mb-2">Notas Importantes:</h3>
                     <ul className="list-disc list-inside text-sm space-y-1">
                         <li>Las columnas <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">date</code> y <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">material</code> son <span className="font-bold">obligatorias</span>.</li>
-                         <li>Las columnas <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">subtipo</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Cliente</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Proveedor</code>, y <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Origen</code> son <span className="font-bold">opcionales</span>.</li>
+                        <li>Las columnas <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">No Id</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">subtipo</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Lote</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Cliente</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Proveedor</code>, y <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Origen</code> son <span className="font-bold">opcionales</span>.</li>
                         <li>El formato de fecha debe ser <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">dd/mm/yyyy</code>. Se aceptan barras (<code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">/</code>) o guiones (<code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">-</code>) como separadores. También se leen correctamente los números de serie de fecha de Excel.</li>
-                        <li>Los nombres de las columnas (cabeceras) no distinguen entre mayúsculas y minúsculas (ej. <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">cliente</code> es igual que <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">Cliente</code>).</li>
+                        <li>Los nombres de las columnas (cabeceras) no distinguen entre mayúsculas y minúsculas (ej. <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">no id</code> es igual que <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">No Id</code>).</li>
                         <li>Los nombres de las columnas de nutrientes deben coincidir con los "keys" de la tabla de abajo (ej. <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">proteina</code>, <code className="bg-slate-200 text-slate-100 p-1 rounded text-xs">humedad</code>).</li>
                         <li>Solo necesitas incluir las columnas de los nutrientes que deseas analizar.</li>
                         <li>Las celdas sin valor numérico serán ignoradas.</li>
                     </ul>
                 </div>
 
-                <h3 className="text-lg font-semibold text-slate-100 mb-2">Tabla de Ejemplo:</h3>
+                <h3 className="text-lg font-semibold text-slate-100 mb-2">Tabla de Ejemplo Simplificada:</h3>
                 <div className="overflow-x-auto rounded-lg border border-slate-300">
                     <table className="min-w-full divide-y divide-slate-300 text-sm">
                         <thead className="bg-ui-dark">
                             <tr>
+                                <th className="px-4 py-2 text-left font-semibold">No Id</th>
                                 <th className="px-4 py-2 text-left font-semibold">date</th>
                                 <th className="px-4 py-2 text-left font-semibold">material</th>
+                                <th className="px-4 py-2 text-left font-semibold">subtipo</th>
+                                <th className="px-4 py-2 text-left font-semibold">Lote</th>
                                 {otherHeaders.map(key => (
                                      <th key={key} className="px-4 py-2 text-left font-semibold">{key}</th>
                                 ))}
-                                {nutrientHeaders.slice(0, 4).map(key => (
+                                {nutrientHeaders.slice(0, 3).map(key => (
                                     <th key={key} className="px-4 py-2 text-left font-semibold">{key}</th>
                                 ))}
                                 <th className="px-4 py-2 text-left font-semibold">...</th>
@@ -67,29 +70,31 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                         </thead>
                         <tbody className="bg-ui-card divide-y divide-slate-300">
                             <tr>
+                                <td className="px-4 py-2 whitespace-nowrap">ID-1051</td>
                                 <td className="px-4 py-2 whitespace-nowrap">26/10/2023</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Soya</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Harina</td>
+                                <td className="px-4 py-2 whitespace-nowrap">LT-431</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Cliente A</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Cargill</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Argentina</td>
                                 <td className="px-4 py-2 whitespace-nowrap">46.5</td>
                                 <td className="px-4 py-2 whitespace-nowrap">12.1</td>
                                 <td className="px-4 py-2 whitespace-nowrap">1.8</td>
-                                <td className="px-4 py-2 whitespace-nowrap">3.2</td>
                                 <td className="px-4 py-2 whitespace-nowrap">...</td>
                             </tr>
                             <tr>
+                                <td className="px-4 py-2 whitespace-nowrap">ID-9082</td>
                                 <td className="px-4 py-2 whitespace-nowrap">26/10/2023</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Maiz</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Grano Entero</td>
+                                <td className="px-4 py-2 whitespace-nowrap">LT-771</td>
                                 <td className="px-4 py-2 whitespace-nowrap">Cliente B</td>
                                 <td className="px-4 py-2 whitespace-nowrap">ADM</td>
                                 <td className="px-4 py-2 whitespace-nowrap">USA</td>
                                 <td className="px-4 py-2 whitespace-nowrap">8.8</td>
                                 <td className="px-4 py-2 whitespace-nowrap">14.5</td>
                                 <td className="px-4 py-2 whitespace-nowrap">4.2</td>
-                                <td className="px-4 py-2 whitespace-nowrap">2.1</td>
                                 <td className="px-4 py-2 whitespace-nowrap">...</td>
                             </tr>
                         </tbody>

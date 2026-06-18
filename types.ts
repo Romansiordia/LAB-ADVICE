@@ -1,7 +1,9 @@
 export interface RawMaterialData {
+  noId?: string;
   date: string;
   material: string;
   subtipo?: string;
+  lote?: string;
   Cliente?: string;
   Proveedor?: string;
   Origen?: string;
