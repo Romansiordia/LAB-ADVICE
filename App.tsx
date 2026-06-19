@@ -599,13 +599,11 @@ const App: React.FC = () => {
                                                         const variance = values.length > 1 ? values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1) : 0;
                                                         const stdDev = Math.sqrt(variance);
 
-                                                        const lcl = mean - stdDev;
-                                                        const ucl = mean + stdDev;
-                                                        const rejectedCount = values.filter(v => v < lcl || v > ucl).length;
-                                                        const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
-                                                        
                                                         const thresholds = MYCOTOXIN_THRESHOLDS[selectedSpecies]?.[nutrient.key];
                                                         if (!thresholds) return null;
+
+                                                        const rejectedCount = values.filter(v => v > thresholds.part2_max).length;
+                                                        const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
 
                                                         const unit = nutrient.label.includes('ppb') ? 'ppb' : 'ppm';
                                                         const cleanLabel = nutrient.label.replace(' (ppb)', '').replace(' (ppm)', '');
