@@ -62,6 +62,9 @@ export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({
     const meanPercentage = Math.min(Math.max((value / max) * 100, 0), 100);
     const maxPercentage = Math.min(Math.max((maxObserved / max) * 100, 0), 100);
 
+    // Safe layout boundary clamping for the floating label to prevent card boundary overflow
+    const labelPositionPercentage = Math.min(Math.max(meanPercentage, 16), 84);
+
     return (
         <div 
             id={`gauge-card-${label.toLowerCase().replace(/\s+/g, '-')}`} 
@@ -87,15 +90,15 @@ export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({
             <div className="w-full space-y-4 my-2">
                 {/* Pointer Values Label Stage */}
                 <div className="relative h-5">
-                    {/* Floating Average Indicator Label */}
+                    {/* Floating Average Indicator Label clamped to keep centered within card boundaries */}
                     <div 
                         className="absolute -top-1 transform -translate-x-1/2 flex flex-col items-center z-10 transition-all duration-500 ease-out"
-                        style={{ left: `${meanPercentage}%` }}
+                        style={{ left: `${labelPositionPercentage}%` }}
                     >
-                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white ${activeColor} shadow-sm font-mono whitespace-nowrap`}>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold text-white ${activeColor} shadow-md whitespace-nowrap`}>
                             {value.toFixed(2)} {unit}
                         </span>
-                        <span className="w-1.5 h-1.5 rotate-45 bg-inherit -mt-1 bg-[#1e293b]" />
+                        <span className="w-1.5 h-1.5 rotate-45 bg-inherit -mt-1" style={{ backgroundColor: value <= part1_max ? '#10b981' : value <= part2_max ? '#f59e0b' : '#ef4444' }} />
                     </div>
                 </div>
 
@@ -160,28 +163,28 @@ export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({
                 </div>
             </div>
 
-            {/* Bottom integrated details section matching KPI cards data */}
-            <div className="w-full grid grid-cols-2 gap-x-3 gap-y-2 pt-3 mt-2 border-t border-white/5 text-[11px]">
+            {/* Bottom integrated details section matching KPI cards data (Stacked nicely to prevent text collision) */}
+            <div className="w-full space-y-1.5 pt-3 mt-3 border-t border-white/5 text-[11px] text-slate-400">
                 {/* Standard Deviation */}
-                <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-slate-500 text-[10px] font-medium">DE (Desv Std):</span>
-                    <span className="font-mono font-semibold text-slate-200">
-                        {stdDev !== undefined ? `${stdDev.toFixed(2)}` : 'N/A'}<span className="text-[9px] text-slate-500 ml-0.5">{unit}</span>
+                <div className="flex items-center justify-between">
+                    <span className="text-slate-500 text-[10.5px] font-medium uppercase tracking-wider">Desv. Estándar (DE):</span>
+                    <span className="font-mono font-semibold text-slate-200 text-[11px]">
+                        {stdDev !== undefined ? stdDev.toFixed(2) : 'N/A'}<span className="text-[9.5px] text-slate-500 ml-0.5">{unit}</span>
                     </span>
                 </div>
 
                 {/* Max Observed */}
-                <div className="flex items-center justify-between text-slate-400">
-                    <span className="text-slate-500 text-[10px] font-medium">Máx Obs:</span>
-                    <span className="font-mono font-bold text-red-400">
-                        {maxObserved.toFixed(2)}<span className="text-[9px] text-red-500/70 ml-0.5">{unit}</span>
+                <div className="flex items-center justify-between">
+                    <span className="text-slate-500 text-[10.5px] font-medium uppercase tracking-wider font-sans">Máx Observado:</span>
+                    <span className="font-mono font-bold text-red-400 text-[11px]">
+                        {maxObserved.toFixed(2)}<span className="text-[9.5px] text-red-500/70 ml-0.5">{unit}</span>
                     </span>
                 </div>
 
                 {/* Rej rate / Fuera de Limite */}
-                <div className="col-span-2 flex items-center justify-between text-slate-400 pt-0.5">
-                    <span className="text-slate-500 text-[10px] font-medium">Fuera de Límites (Rechazos):</span>
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${rejectionRate && rejectionRate > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'}`}>
+                <div className="flex items-center justify-between pt-0.5">
+                    <span className="text-slate-500 text-[10.5px] font-medium uppercase tracking-wider">Fuera de Límites:</span>
+                    <span className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-bold ${rejectionRate && rejectionRate > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'}`}>
                         {rejectionRate !== undefined ? `${rejectionRate.toFixed(1)}%` : '0.0%'}
                     </span>
                 </div>
