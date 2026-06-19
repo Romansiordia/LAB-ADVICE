@@ -627,7 +627,7 @@ const App: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {selectedCategory === 'nutrients' && (
+                                    {selectedCategory === 'nutrients' && currentView !== 'monthly_trends' && (
                                         <div className="animate-fade-in grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                                             {activeCategoryNutrients.map((nutrient) => {
                                                 const chartData = multiTrendData
@@ -763,6 +763,7 @@ const App: React.FC = () => {
                                     <ParameterMonthlyTrends 
                                         data={multiTrendData} 
                                         onExpand={(key) => setZoomConfig({ type: 'monthly', key })}
+                                        category={selectedCategory}
                                     />
                                 </div>
                             )}
