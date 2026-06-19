@@ -756,10 +756,13 @@ const App: React.FC = () => {
 
                             {(isGeneratingPdf || currentView === 'monthly_trends') && (
                                 <div className="animate-fade-in mt-8">
-                                    <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
+                                    <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
                                         <CalendarIcon />
                                         <span className="ml-2">Promedios Mensuales Consolidados</span>
                                     </h2>
+                                    <p className="text-xs text-slate-400 mb-6 px-1 ml-7 max-w-4xl leading-relaxed">
+                                        Estas tarjetas muestran el promedio consolidado correspondiente al <span className="text-slate-200 font-semibold">último mes con datos registrados</span> en su secuencia. Los indicadores visuales superiores muestran el <span className="text-slate-200 font-semibold">promedio general acumulado</span> de todos los registros en el periodo seleccionado.
+                                    </p>
                                     <ParameterMonthlyTrends 
                                         data={multiTrendData} 
                                         onExpand={(key) => setZoomConfig({ type: 'monthly', key })}
