@@ -574,8 +574,8 @@ const App: React.FC = () => {
                                             <div className="space-y-3">
                                                 <div className="px-1 flex justify-between items-center">
                                                     <div>
-                                                        <h4 className="text-sm font-semibold uppercase tracking-wider text-ui-accent">Indicadores Visuales de Riesgo (Velocímetros)</h4>
-                                                        <p className="text-xs text-slate-400">Clasificación en tiempo real de los promedios observados contra normas de inocuidad.</p>
+                                                        <h4 className="text-sm font-semibold uppercase tracking-wider text-ui-accent">Monitoreo y Control de Riesgos por Micotoxinas</h4>
+                                                        <p className="text-xs text-slate-400">Indicadores de riesgo integrados con análisis estadístico de promedio, desviación estándar y tasa de rechazo.</p>
                                                     </div>
                                                     <div className="flex items-center gap-4 text-[10px] font-semibold text-slate-400">
                                                         <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-500/20 border border-emerald-500/40" /> Seguro</div>
@@ -595,6 +595,14 @@ const App: React.FC = () => {
                                                         
                                                         const mean = values.reduce((a, b) => a + b, 0) / values.length;
                                                         const maxObserved = Math.max(...values);
+
+                                                        const variance = values.length > 1 ? values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1) : 0;
+                                                        const stdDev = Math.sqrt(variance);
+
+                                                        const lcl = mean - stdDev;
+                                                        const ucl = mean + stdDev;
+                                                        const rejectedCount = values.filter(v => v < lcl || v > ucl).length;
+                                                        const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
                                                         
                                                         const thresholds = MYCOTOXIN_THRESHOLDS[selectedSpecies]?.[nutrient.key];
                                                         if (!thresholds) return null;
@@ -610,6 +618,9 @@ const App: React.FC = () => {
                                                                 thresholds={thresholds}
                                                                 label={cleanLabel}
                                                                 unit={unit}
+                                                                stdDev={stdDev}
+                                                                rejectionRate={rejectionRate}
+                                                                onClick={() => startTransition(() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key }))}
                                                             />
                                                         );
                                                     })}
@@ -618,54 +629,56 @@ const App: React.FC = () => {
                                         </div>
                                     )}
 
-                                    <div className="animate-fade-in grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-                                        {activeCategoryNutrients.map((nutrient) => {
-                                            const chartData = multiTrendData
-                                                .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
-                                                .map(d => ({ date: d.date, value: Number(d[nutrient.key]), noId: d.noId, lote: d.lote }));
-                                            
-                                            const values = chartData.map(d => d.value);
-                                            const mean = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-                                            const variance = values.length > 1 ? values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1) : 0;
-                                            const stdDev = Math.sqrt(variance);
+                                    {selectedCategory === 'nutrients' && (
+                                        <div className="animate-fade-in grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                                            {activeCategoryNutrients.map((nutrient) => {
+                                                const chartData = multiTrendData
+                                                    .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                                                    .map(d => ({ date: d.date, value: Number(d[nutrient.key]), noId: d.noId, lote: d.lote }));
+                                                
+                                                const values = chartData.map(d => d.value);
+                                                const mean = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+                                                const variance = values.length > 1 ? values.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (values.length - 1) : 0;
+                                                const stdDev = Math.sqrt(variance);
 
-                                            const lcl = mean - stdDev;
-                                            const ucl = mean + stdDev;
-                                            const rejectedCount = values.filter(v => v < lcl || v > ucl).length;
-                                            const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
+                                                const lcl = mean - stdDev;
+                                                const ucl = mean + stdDev;
+                                                const rejectedCount = values.filter(v => v < lcl || v > ucl).length;
+                                                const rejectionRate = values.length > 0 ? (rejectedCount / values.length) * 100 : 0;
 
-                                            const unit = nutrient.label.includes('%') 
-                                                ? '%' 
-                                                : nutrient.label.includes('ppb') 
-                                                ? ' ppb' 
-                                                : nutrient.label.includes('ppm') 
-                                                ? ' ppm' 
-                                                : nutrient.label.includes('µm') 
-                                                ? ' µm' 
-                                                : '';
+                                                const unit = nutrient.label.includes('%') 
+                                                    ? '%' 
+                                                    : nutrient.label.includes('ppb') 
+                                                    ? ' ppb' 
+                                                    : nutrient.label.includes('ppm') 
+                                                    ? ' ppm' 
+                                                    : nutrient.label.includes('µm') 
+                                                    ? ' µm' 
+                                                    : '';
 
-                                            const formattedMean = chartData.length > 0 ? `${mean.toFixed(2)}${unit}` : undefined;
-                                            const formattedSub = chartData.length > 0 ? `DE: ${stdDev.toFixed(2)}${unit}` : undefined;
-                                            const cleanLabel = nutrient.label
-                                                .replace(' (%)', '')
-                                                .replace(' (ppb)', '')
-                                                .replace(' (ppm)', '')
-                                                .replace(' (µm)', '');
-                                            
-                                            return (
-                                                <KpiCard
-                                                    key={`kpi-${nutrient.key}`}
-                                                    title={`Prom. ${cleanLabel}`}
-                                                    value={formattedMean}
-                                                    subValue={formattedSub}
-                                                    rejectionRate={rejectionRate}
-                                                    icon={getNutrientIcon(nutrient.key, "w-4 h-4 text-white stroke-[2]")}
-                                                    color={nutrient.color || '#0ea5e9'}
-                                                    onClick={() => startTransition(() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key }))}
-                                                />
-                                            );
-                                        })}
-                                    </div>
+                                                const formattedMean = chartData.length > 0 ? `${mean.toFixed(2)}${unit}` : undefined;
+                                                const formattedSub = chartData.length > 0 ? `DE: ${stdDev.toFixed(2)}${unit}` : undefined;
+                                                const cleanLabel = nutrient.label
+                                                    .replace(' (%)', '')
+                                                    .replace(' (ppb)', '')
+                                                    .replace(' (ppm)', '')
+                                                    .replace(' (µm)', '');
+                                                
+                                                return (
+                                                    <KpiCard
+                                                        key={`kpi-${nutrient.key}`}
+                                                        title={`Prom. ${cleanLabel}`}
+                                                        value={formattedMean}
+                                                        subValue={formattedSub}
+                                                        rejectionRate={rejectionRate}
+                                                        icon={getNutrientIcon(nutrient.key, "w-4 h-4 text-white stroke-[2]")}
+                                                        color={nutrient.color || '#0ea5e9'}
+                                                        onClick={() => startTransition(() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key }))}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    )}
 
                                     {(isGeneratingPdf || currentView === 'general') && (
                                         <div className="animate-fade-in mt-8">

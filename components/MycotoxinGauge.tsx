@@ -7,9 +7,21 @@ interface MycotoxinGaugeProps {
     thresholds: ThresholdRange;
     label: string;
     unit: string;
+    stdDev?: number;
+    rejectionRate?: number;
+    onClick?: () => void;
 }
 
-export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({ value, maxObserved, thresholds, label, unit }) => {
+export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({ 
+    value, 
+    maxObserved, 
+    thresholds, 
+    label, 
+    unit,
+    stdDev,
+    rejectionRate,
+    onClick
+}) => {
     const { min, max, part1_max, part2_max } = thresholds;
 
     // Determine current health status of average mycotoxin levels
@@ -53,12 +65,13 @@ export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({ value, maxObserv
     return (
         <div 
             id={`gauge-card-${label.toLowerCase().replace(/\s+/g, '-')}`} 
-            className="bg-[#0f1d30] rounded-xl border border-white/5 p-5 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-[#38bdf8]/20 transition-all duration-300"
+            onClick={onClick}
+            className="bg-[#0f1d30] rounded-xl border border-white/5 p-5 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-[#38bdf8]/30 transition-all duration-300 cursor-pointer select-none"
         >
             {/* Header */}
-            <div className="w-full flex justify-between items-start mb-4">
+            <div className="w-full flex justify-between items-start mb-3">
                 <div>
-                    <h4 className="font-semibold text-slate-100 text-sm group-hover:text-white transition-colors">
+                    <h4 className="font-semibold text-slate-100 text-sm group-hover:text-ui-accent transition-colors">
                         {label}
                     </h4>
                     <span className="text-[11px] text-slate-400">
@@ -147,17 +160,30 @@ export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({ value, maxObserv
                 </div>
             </div>
 
-            {/* Bottom details block */}
-            <div className="w-full grid grid-cols-2 gap-2 pt-3 mt-1 border-t border-white/5 text-[10px] text-slate-400">
-                <div className="flex items-center gap-1.5 justify-start">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
-                    <span>Promedio:</span>
-                    <strong className="font-mono text-slate-200">{value.toFixed(2)}</strong>
+            {/* Bottom integrated details section matching KPI cards data */}
+            <div className="w-full grid grid-cols-2 gap-x-3 gap-y-2 pt-3 mt-2 border-t border-white/5 text-[11px]">
+                {/* Standard Deviation */}
+                <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-slate-500 text-[10px] font-medium">DE (Desv Std):</span>
+                    <span className="font-mono font-semibold text-slate-200">
+                        {stdDev !== undefined ? `${stdDev.toFixed(2)}` : 'N/A'}<span className="text-[9px] text-slate-500 ml-0.5">{unit}</span>
+                    </span>
                 </div>
-                <div className="flex items-center gap-1.5 justify-end">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                    <span>Máx Observado:</span>
-                    <strong className="font-mono text-red-400">{maxObserved.toFixed(2)}</strong>
+
+                {/* Max Observed */}
+                <div className="flex items-center justify-between text-slate-400">
+                    <span className="text-slate-500 text-[10px] font-medium">Máx Obs:</span>
+                    <span className="font-mono font-bold text-red-400">
+                        {maxObserved.toFixed(2)}<span className="text-[9px] text-red-500/70 ml-0.5">{unit}</span>
+                    </span>
+                </div>
+
+                {/* Rej rate / Fuera de Limite */}
+                <div className="col-span-2 flex items-center justify-between text-slate-400 pt-0.5">
+                    <span className="text-slate-500 text-[10px] font-medium">Fuera de Límites (Rechazos):</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${rejectionRate && rejectionRate > 0 ? 'bg-red-500/10 text-red-400 border border-red-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/25'}`}>
+                        {rejectionRate !== undefined ? `${rejectionRate.toFixed(1)}%` : '0.0%'}
+                    </span>
                 </div>
             </div>
         </div>
