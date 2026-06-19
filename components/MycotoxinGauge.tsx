@@ -9,197 +9,155 @@ interface MycotoxinGaugeProps {
     unit: string;
 }
 
-const polarToCartesian = (centerX: number, centerY: number, radius: number, angleInDegrees: number) => {
-    const angleInRadians = (angleInDegrees * Math.PI) / 180.0;
-    return {
-        x: centerX + radius * Math.cos(angleInRadians),
-        y: centerY - radius * Math.sin(angleInRadians)
-    };
-};
-
-const describeArc = (x: number, y: number, radius: number, startAngle: number, endAngle: number) => {
-    const start = polarToCartesian(x, y, radius, startAngle);
-    const end = polarToCartesian(x, y, radius, endAngle);
-    const largeArcFlag = Math.abs(startAngle - endAngle) <= 180 ? "0" : "1";
-    // Using sweep flag 0 for counter-clockwise / decrementing angle path
-    return [
-        "M", start.x, start.y,
-        "A", radius, radius, 0, largeArcFlag, 0, end.x, end.y
-    ].join(" ");
-};
-
 export const MycotoxinGauge: React.FC<MycotoxinGaugeProps> = ({ value, maxObserved, thresholds, label, unit }) => {
     const { min, max, part1_max, part2_max } = thresholds;
 
-    // Get current status color and classification
-    const { color, labelStatus, textClass, bgClass, borderClass } = useMemo(() => {
+    // Determine current health status of average mycotoxin levels
+    const { statusLabel, textClass, bgClass, borderClass, activeColor } = useMemo(() => {
         if (value <= part1_max) {
             return {
-                color: '#10b981', // Emerald
-                labelStatus: 'BAJO (Seguro)',
+                statusLabel: 'BAJO (Seguro)',
                 textClass: 'text-emerald-400',
                 bgClass: 'bg-emerald-500/10',
-                borderClass: 'border-emerald-500/20'
+                borderClass: 'border-emerald-500/20',
+                activeColor: 'bg-emerald-500'
             };
         } else if (value <= part2_max) {
             return {
-                color: '#f59e0b', // Amber
-                labelStatus: 'MEDIO (Límite)',
+                statusLabel: 'MEDIO (Límite)',
                 textClass: 'text-amber-400',
                 bgClass: 'bg-amber-500/10',
-                borderClass: 'border-amber-500/20'
+                borderClass: 'border-amber-500/20',
+                activeColor: 'bg-amber-500'
             };
         } else {
             return {
-                color: '#ef4444', // Red
-                labelStatus: 'ALTO (Riesgo)',
+                statusLabel: 'ALTO (Riesgo)',
                 textClass: 'text-red-400',
                 bgClass: 'bg-red-500/10',
-                borderClass: 'border-red-500/20'
+                borderClass: 'border-red-500/20',
+                activeColor: 'bg-red-500'
             };
         }
     }, [value, part1_max, part2_max]);
 
-    // Calculate angles
-    // 0 to max matches 180 to 0 degrees
-    const valuePercentage = Math.min(Math.max((value - min) / (max - min), 0), 1);
-    const needleAngle = 180 - (valuePercentage * 180);
+    // Proportional widths for the multi-segment threshold bar
+    const part1Width = (part1_max / max) * 100;
+    const part2Width = ((part2_max - part1_max) / max) * 100;
+    const part3Width = ((max - part2_max) / max) * 100;
 
-    const part1Percentage = Math.min(Math.max((part1_max - min) / (max - min), 0), 1);
-    const part1Angle = 180 - (part1Percentage * 180);
-
-    const part2Percentage = Math.min(Math.max((part2_max - min) / (max - min), 0), 1);
-    const part2Angle = 180 - (part2Percentage * 180);
-
-    // SVG coordinates for needle line
-    const center = { x: 100, y: 95 };
-    const radius = 65;
-    const needleTip = polarToCartesian(center.x, center.y, radius - 10, needleAngle);
-
-    // Coordinates for threshold marks
-    const part1MarkInner = polarToCartesian(center.x, center.y, radius - 8, part1Angle);
-    const part1MarkOuter = polarToCartesian(center.x, center.y, radius + 8, part1Angle);
-    const part2MarkInner = polarToCartesian(center.x, center.y, radius - 8, part2Angle);
-    const part2MarkOuter = polarToCartesian(center.x, center.y, radius + 8, part2Angle);
+    // Positioning of current values (percentage from 0 to 100%)
+    const meanPercentage = Math.min(Math.max((value / max) * 100, 0), 100);
+    const maxPercentage = Math.min(Math.max((maxObserved / max) * 100, 0), 100);
 
     return (
-        <div id={`gauge-card-${label.toLowerCase().replace(/\s+/g, '-')}`} className="bg-ui-card rounded-xl border border-ui-border p-5 flex flex-col items-center justify-between shadow-lg relative overflow-hidden group hover:border-[#38bdf8]/30 transition-all duration-300">
-            <div className="w-full flex justify-between items-start mb-2">
+        <div 
+            id={`gauge-card-${label.toLowerCase().replace(/\s+/g, '-')}`} 
+            className="bg-[#0f1d30] rounded-xl border border-white/5 p-5 flex flex-col justify-between shadow-lg relative overflow-hidden group hover:border-[#38bdf8]/20 transition-all duration-300"
+        >
+            {/* Header */}
+            <div className="w-full flex justify-between items-start mb-4">
                 <div>
-                    <h4 className="font-semibold text-slate-200 text-sm group-hover:text-white transition-colors">{label}</h4>
-                    <p className="text-[10px] text-slate-400">Límites para especie destino</p>
+                    <h4 className="font-semibold text-slate-100 text-sm group-hover:text-white transition-colors">
+                        {label}
+                    </h4>
+                    <span className="text-[11px] text-slate-400">
+                        {unit}
+                    </span>
                 </div>
-                <div className={`px-2 py-0.5 rounded text-[10px] font-bold border ${bgClass} ${textClass} ${borderClass}`}>
-                    {labelStatus}
+                <div className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${bgClass} ${textClass} ${borderClass} tracking-wide`}>
+                    {statusLabel}
                 </div>
             </div>
 
-            {/* Speeder Canvas */}
-            <div className="relative w-44 h-24 mb-3 flex items-end justify-center">
-                <svg className="w-full h-full" viewBox="0 0 200 110">
-                    {/* Background Arc */}
-                    <path
-                        d={describeArc(center.x, center.y, radius, 180, 0)}
-                        fill="none"
-                        stroke="#1e293b"
-                        strokeWidth="10"
-                        strokeLinecap="round"
+            {/* Proportional Linear Gauge */}
+            <div className="w-full space-y-4 my-2">
+                {/* Pointer Values Label Stage */}
+                <div className="relative h-5">
+                    {/* Floating Average Indicator Label */}
+                    <div 
+                        className="absolute -top-1 transform -translate-x-1/2 flex flex-col items-center z-10 transition-all duration-500 ease-out"
+                        style={{ left: `${meanPercentage}%` }}
+                    >
+                        <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold text-white ${activeColor} shadow-sm font-mono whitespace-nowrap`}>
+                            {value.toFixed(2)} {unit}
+                        </span>
+                        <span className="w-1.5 h-1.5 rotate-45 bg-inherit -mt-1 bg-[#1e293b]" />
+                    </div>
+                </div>
+
+                {/* Track bar split into proportional zones */}
+                <div className="relative h-2.5 w-full rounded-full overflow-visible bg-slate-800 flex">
+                    <div 
+                        style={{ width: `${part1Width}%` }} 
+                        className="h-full bg-emerald-500/20 group-hover:bg-emerald-500/30 transition-colors rounded-l-full relative"
+                        title={`Límite de Seguridad: 0 a ${part1_max} ${unit}`}
+                    />
+                    <div 
+                        style={{ width: `${part2Width}%` }} 
+                        className="h-full bg-amber-500/20 group-hover:bg-amber-500/30 transition-colors relative"
+                        title={`Límite de Alerta: ${part1_max} a ${part2_max} ${unit}`}
+                    />
+                    <div 
+                        style={{ width: `${part3Width}%` }} 
+                        className="h-full bg-red-500/20 group-hover:bg-red-500/30 transition-colors rounded-r-full relative"
+                        title={`Límite Crítico: ${part2_max} a ${max} ${unit}`}
                     />
 
-                    {/* Green Segment (Safe Zone) */}
-                    <path
-                        d={describeArc(center.x, center.y, radius, 180, part1Angle)}
-                        fill="none"
-                        stroke="#10b981"
-                        strokeOpacity="0.4"
-                        strokeWidth="10"
+                    {/* Zone Boundary Lines ticks */}
+                    <div 
+                        className="absolute top-0 bottom-0 w-[1px] bg-white/20 z-1" 
+                        style={{ left: `${part1Width}%` }}
+                    />
+                    <div 
+                        className="absolute top-0 bottom-0 w-[1px] bg-white/20 z-1" 
+                        style={{ left: `${part1Width + part2Width}%` }}
                     />
 
-                    {/* Amber Segment (Moderate Zone) */}
-                    <path
-                        d={describeArc(center.x, center.y, radius, part1Angle, part2Angle)}
-                        fill="none"
-                        stroke="#f59e0b"
-                        strokeOpacity="0.4"
-                        strokeWidth="10"
+                    {/* Average Point Position Element */}
+                    <div 
+                        className={`absolute top-1/2 -translate-y-1/2 w-4 h-4 rounded-full border-2 border-[#0f1d30] shadow-md ${activeColor} z-20 transition-all duration-500 ease-out`}
+                        style={{ left: `calc(${meanPercentage}% - 8px)` }}
                     />
 
-                    {/* Red Segment (High Risk Zone) */}
-                    <path
-                        d={describeArc(center.x, center.y, radius, part2Angle, 0)}
-                        fill="none"
-                        stroke="#ef4444"
-                        strokeOpacity="0.4"
-                        strokeWidth="10"
+                    {/* Peak Max Observed Marker Tick */}
+                    <div 
+                        className="absolute -top-1 -bottom-1 w-[2px] bg-red-400 border border-[#0f1d30] shadow-sm z-10 transition-all duration-500 ease-out"
+                        style={{ left: `${maxPercentage}%` }}
+                        title={`Máximo detectado: ${maxObserved.toFixed(2)} ${unit}`}
                     />
+                </div>
 
-                    {/* Colored Active Progress Arc */}
-                    {valuePercentage > 0 && (
-                        <path
-                            d={describeArc(center.x, center.y, radius, 180, needleAngle)}
-                            fill="none"
-                            stroke={color}
-                            strokeWidth="10"
-                            strokeLinecap="round"
-                            className="transition-all duration-500 ease-out"
-                        />
-                    )}
-
-                    {/* Part 1 Limit Marker */}
-                    <line
-                        x1={part1MarkInner.x}
-                        y1={part1MarkInner.y}
-                        x2={part1MarkOuter.x}
-                        y2={part1MarkOuter.y}
-                        stroke="#f8fafc"
-                        strokeWidth="2"
-                    />
-
-                    {/* Part 2 Limit Marker */}
-                    <line
-                        x1={part2MarkInner.x}
-                        y1={part2MarkInner.y}
-                        x2={part2MarkOuter.x}
-                        y2={part2MarkOuter.y}
-                        stroke="#f8fafc"
-                        strokeWidth="2"
-                    />
-
-                    {/* Needle */}
-                    <line
-                        x1={center.x}
-                        y1={center.y}
-                        x2={needleTip.x}
-                        y2={needleTip.y}
-                        stroke={color}
-                        strokeWidth="3.5"
-                        strokeLinecap="round"
-                        className="transition-all duration-500 ease-out"
-                    />
-
-                    {/* Center Pin */}
-                    <circle cx={center.x} cy={center.y} r="5" fill="#f8fafc" />
-                    <circle cx={center.x} cy={center.y} r="2.5" fill={color} />
-                </svg>
-
-                {/* Left/Right Threshold Limits labels */}
-                <div className="absolute -bottom-1 left-2 text-[9px] font-mono text-slate-500">0</div>
-                <div className="absolute -bottom-1 right-2 text-[9px] font-mono text-slate-500">{max}</div>
+                {/* Scale Axis text labels */}
+                <div className="flex justify-between items-center text-[9px] font-mono text-slate-500 pt-0.5">
+                    <span>{min}</span>
+                    <span 
+                        className="absolute transform -translate-x-1/2 text-[9px] font-semibold text-emerald-500/80" 
+                        style={{ left: `calc(${part1Width}% + 20px)` }}
+                    >
+                        {part1_max}
+                    </span>
+                    <span 
+                        className="absolute transform -translate-x-1/2 text-[9px] font-semibold text-amber-500/80" 
+                        style={{ left: `calc(${part1Width + part2Width}% + 20px)` }}
+                    >
+                        {part2_max}
+                    </span>
+                    <span>{max}</span>
+                </div>
             </div>
 
-            {/* Readout stats */}
-            <div className="w-full grid grid-cols-3 gap-1 pt-2 border-t border-white/5 text-center text-[10px]">
-                <div>
-                    <span className="block text-slate-500 uppercase tracking-wider text-[9px]">Promedio</span>
-                    <span className="font-bold font-mono text-slate-200 text-xs">{value.toFixed(2)}{unit}</span>
+            {/* Bottom details block */}
+            <div className="w-full grid grid-cols-2 gap-2 pt-3 mt-1 border-t border-white/5 text-[10px] text-slate-400">
+                <div className="flex items-center gap-1.5 justify-start">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+                    <span>Promedio:</span>
+                    <strong className="font-mono text-slate-200">{value.toFixed(2)}</strong>
                 </div>
-                <div>
-                    <span className="block text-slate-500 uppercase tracking-wider text-[9px]">Límite S.</span>
-                    <span className="font-semibold font-mono text-emerald-400">{part1_max}{unit}</span>
-                </div>
-                <div>
-                    <span className="block text-slate-500 uppercase tracking-wider text-[9px]">Máx Obs.</span>
-                    <span className="font-bold font-mono text-red-400 text-xs">{maxObserved.toFixed(2)}{unit}</span>
+                <div className="flex items-center gap-1.5 justify-end">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                    <span>Máx Observado:</span>
+                    <strong className="font-mono text-red-400">{maxObserved.toFixed(2)}</strong>
                 </div>
             </div>
         </div>
