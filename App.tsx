@@ -9,7 +9,8 @@ import { TrendingUpIcon } from './components/icons/TrendingUpIcon';
 import { ChartBarIcon } from './components/icons/ChartBarIcon';
 import { DataFormatModal } from './components/DataFormatModal';
 import { RawMaterialData } from './types';
-import { NUTRIENTS } from './constants';
+import { NUTRIENTS, MYCOTOXIN_THRESHOLDS, SPECIES_LABELS } from './constants';
+import { MycotoxinGauge } from './components/MycotoxinGauge';
 import { SAMPLE_DATA } from './sample-data';
 import { AiAnalysisModal } from './components/AiAnalysisModal';
 import { SparklesIcon } from './components/icons/SparklesIcon';
@@ -154,6 +155,7 @@ const App: React.FC = () => {
     const [selectedMaterial, setSelectedMaterial] = useState<string>(firstSampleMaterial);
     const [currentView, setCurrentView] = useState<ViewMode>('general');
     const [selectedCategory, setSelectedCategory] = useState<'nutrients' | 'mycotoxins'>('nutrients');
+    const [selectedSpecies, setSelectedSpecies] = useState<string>('betail');
     
     const [selectedSubtipo, setSelectedSubtipo] = useState<string>(ALL_FILTER);
     const [selectedLote, setSelectedLote] = useState<string>(ALL_FILTER);
@@ -535,6 +537,84 @@ const App: React.FC = () => {
                                             >
                                                 Micotoxinas
                                             </button>
+                                        </div>
+                                    )}
+
+                                    {selectedCategory === 'mycotoxins' && (
+                                        <div className="animate-fade-in space-y-6">
+                                            {/* Species Selector Card */}
+                                            {!isGeneratingPdf && (
+                                                <div className="bg-ui-card rounded-xl border border-ui-border p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                                                    <div className="space-y-1">
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="flex h-2 w-2 rounded-full bg-ui-accent animate-pulse" />
+                                                            <h3 className="font-bold text-slate-100 text-sm">Monitoreo de Límites por Especie Destino</h3>
+                                                        </div>
+                                                        <p className="text-xs text-slate-400">
+                                                            Configura los límites máximos y transiciones de riesgo específicos de micotoxinas según la clasificación zootécnica de la imagen de control brindada.
+                                                        </p>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-xs font-semibold text-slate-400">Especie:</span>
+                                                        <select
+                                                            id="species-select"
+                                                            value={selectedSpecies}
+                                                            onChange={(e) => setSelectedSpecies(e.target.value)}
+                                                            className="bg-ui-darkest border border-ui-border rounded-lg shadow-sm px-3 py-2 text-xs focus:ring-1 focus:ring-ui-accent focus:border-ui-accent text-slate-100 font-semibold min-w-[200px]"
+                                                        >
+                                                            {SPECIES_LABELS.map(lbl => (
+                                                                <option key={lbl.key} value={lbl.key}>{lbl.label}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* Speedometer Gauges Grid */}
+                                            <div className="space-y-3">
+                                                <div className="px-1 flex justify-between items-center">
+                                                    <div>
+                                                        <h4 className="text-sm font-semibold uppercase tracking-wider text-ui-accent">Indicadores Visuales de Riesgo (Velocímetros)</h4>
+                                                        <p className="text-xs text-slate-400">Clasificación en tiempo real de los promedios observados contra normas de inocuidad.</p>
+                                                    </div>
+                                                    <div className="flex items-center gap-4 text-[10px] font-semibold text-slate-400">
+                                                        <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-500/20 border border-emerald-500/40" /> Seguro</div>
+                                                        <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-500/20 border border-amber-500/40" /> Límite</div>
+                                                        <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-500/20 border border-red-500/40" /> Crítico</div>
+                                                    </div>
+                                                </div>
+                                                
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                                                    {activeCategoryNutrients.map((nutrient) => {
+                                                        const chartData = multiTrendData
+                                                            .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                                                            .map(d => ({ date: d.date, value: Number(d[nutrient.key]), noId: d.noId, lote: d.lote }));
+                                                        
+                                                        const values = chartData.map(d => d.value);
+                                                        if (values.length === 0) return null;
+                                                        
+                                                        const mean = values.reduce((a, b) => a + b, 0) / values.length;
+                                                        const maxObserved = Math.max(...values);
+                                                        
+                                                        const thresholds = MYCOTOXIN_THRESHOLDS[selectedSpecies]?.[nutrient.key];
+                                                        if (!thresholds) return null;
+
+                                                        const unit = nutrient.label.includes('ppb') ? 'ppb' : 'ppm';
+                                                        const cleanLabel = nutrient.label.replace(' (ppb)', '').replace(' (ppm)', '');
+
+                                                        return (
+                                                            <MycotoxinGauge
+                                                                key={`gauge-${nutrient.key}`}
+                                                                value={mean}
+                                                                maxObserved={maxObserved}
+                                                                thresholds={thresholds}
+                                                                label={cleanLabel}
+                                                                unit={unit}
+                                                            />
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
                                         </div>
                                     )}
 
