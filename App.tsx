@@ -394,103 +394,86 @@ const App: React.FC = () => {
                 ) : (
                     <>
                         <header className="mb-6">
-                           <div className="bg-ui-card rounded-xl border border-ui-border p-4 md:p-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                                <div className="flex items-center space-x-4">
-                                     <div className="bg-ui-darkest/50 border border-ui-border rounded-xl p-3 shrink-0">
-                                         <div className="w-8 h-8 rounded-full border-[3px] border-ui-accent flex items-center justify-center">
-                                            <div className="w-2 h-2 rounded-full bg-ui-accent"></div>
-                                         </div>
-                                     </div>
-                                     <div>
-                                         <h1 className="text-lg font-bold text-slate-100 uppercase tracking-widest">
-                                             MATERIAL / PRODUCTO SELECCIONADO
-                                         </h1>
-                                         <p className="text-slate-400 mt-1 text-[13px]">Seleccione la matriz para validar su regresión y estadísticas particulares.</p>
-                                     </div>
-                                 </div>
-                                 <div className="flex items-center gap-3 w-full md:w-auto">
-                                     <select
-                                            value={selectedMaterial}
-                                            onChange={(e) => setSelectedMaterial(e.target.value)}
-                                            className="bg-ui-darkest border border-ui-border text-slate-100 font-bold rounded-lg px-4 py-2.5 uppercase w-full md:w-48 appearance-none focus:ring-1 focus:ring-ui-accent outline-none"
-                                     >
-                                         {availableMaterials.map(mat => (
-                                             <option key={mat} value={mat}>{mat}</option>
-                                         ))}
-                                     </select>
-                                     <button
-                                         onClick={handleGeneratePdf}
-                                         className="flex items-center justify-center bg-ui-darkest border border-ui-border text-slate-300 py-2.5 px-4 rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all shrink-0"
-                                         disabled={multiTrendData.length === 0 || isLoading || isGeneratingPdf}
-                                         title="Generar PDF"
-                                     >
-                                         {isGeneratingPdf ? (
-                                             <div className="animate-spin h-5 w-5 border-2 border-slate-500 border-t-transparent rounded-full" />
-                                         ) : (
-                                             <DownloadIcon />
-                                         )}
-                                     </button>
-                                 </div>
+                            <div className="bg-ui-card rounded-xl border border-ui-border p-4 md:p-6 flex flex-col xl:flex-row items-center justify-between gap-4">
+                                <div className="flex flex-wrap gap-2 w-full xl:w-auto">
+                                    {[
+                                        { id: 'general', label: 'Tendencias' },
+                                        { id: 'monthly_trends', label: 'Tendencias Mensuales' },
+                                        { id: 'histograms', label: 'Distribución' },
+                                        { id: 'statistics', label: 'Estadísticas' },
+                                        { id: 'supplier_quality', label: 'Proveedores' }
+                                    ].map((tab) => (
+                                        <button
+                                            key={tab.id}
+                                            onClick={() => {
+                                                startTransition(() => {
+                                                    setCurrentView(tab.id as ViewMode);
+                                                });
+                                            }}
+                                            className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all whitespace-nowrap border ${
+                                                currentView === tab.id
+                                                    ? 'bg-ui-accent text-[#040d1a] border-ui-accent shadow-[0_0_15px_rgba(0,222,255,0.3)]'
+                                                    : 'bg-ui-card border-ui-border text-slate-300 hover:bg-ui-darkest'
+                                            }`}
+                                        >
+                                            {tab.label}
+                                        </button>
+                                    ))}
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto md:justify-end">
+                                    <div>
+                                        <label className="px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap text-slate-300 bg-ui-card border border-ui-border shadow-sm hover:bg-transparentest cursor-pointer flex items-center group">
+                                            {isLoading ? (
+                                                <>
+                                                    <svg className="animate-spin h-4 w-4 text-slate-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                    </svg>
+                                                    <span>Subiendo...</span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <UploadIcon className="w-4 h-4 mr-2" />
+                                                    <span>Subir Datos</span>
+                                                </>
+                                            )}
+                                            <input 
+                                                type="file" 
+                                                className="hidden" 
+                                                onChange={(e) => {
+                                                    if (e.target.files && e.target.files.length > 0) {
+                                                        handleFileParse(e.target.files[0]);
+                                                    }
+                                                }} 
+                                                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                                                disabled={isLoading}
+                                            />
+                                        </label>
+                                    </div>
+                                    <select
+                                           value={selectedMaterial}
+                                           onChange={(e) => setSelectedMaterial(e.target.value)}
+                                           className="bg-ui-darkest border border-ui-border text-slate-100 font-bold rounded-lg px-4 py-2.5 uppercase w-full md:w-48 appearance-none focus:ring-1 focus:ring-ui-accent outline-none"
+                                    >
+                                        {availableMaterials.map(mat => (
+                                            <option key={mat} value={mat}>{mat}</option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        onClick={handleGeneratePdf}
+                                        className="flex items-center justify-center bg-ui-darkest border border-ui-border text-slate-300 py-2.5 px-4 rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all shrink-0"
+                                        disabled={multiTrendData.length === 0 || isLoading || isGeneratingPdf}
+                                        title="Generar PDF"
+                                    >
+                                        {isGeneratingPdf ? (
+                                            <div className="animate-spin h-5 w-5 border-2 border-slate-500 border-t-transparent rounded-full" />
+                                        ) : (
+                                            <DownloadIcon />
+                                        )}
+                                    </button>
+                                </div>
                             </div>
                         </header>
-
-                        <div className="flex justify-between items-center mb-8">
-                            <div className="bg-transparent rounded-xl flex flex-wrap gap-2">
-                                {[
-                                    { id: 'general', label: 'Tendencias' },
-                                    { id: 'monthly_trends', label: 'Tendencias Mensuales' },
-                                    { id: 'histograms', label: 'Distribución' },
-                                    { id: 'statistics', label: 'Estadísticas' },
-                                    { id: 'supplier_quality', label: 'Proveedores' }
-                                ].map((tab) => (
-                                    <button
-                                        key={tab.id}
-                                        onClick={() => {
-                                            startTransition(() => {
-                                                setCurrentView(tab.id as ViewMode);
-                                            });
-                                        }}
-                                        className={`px-5 py-2 rounded-lg text-sm font-bold transition-all whitespace-nowrap border ${
-                                            currentView === tab.id
-                                                ? 'bg-ui-accent text-[#040d1a] border-ui-accent shadow-[0_0_15px_rgba(0,222,255,0.3)]'
-                                                : 'bg-ui-card text-slate-300 border-ui-border hover:bg-ui-darkest'
-                                        }`}
-                                    >
-                                        {tab.label}
-                                    </button>
-                                ))}
-                            </div>
-                            
-                            <div>
-                                <label className="px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap text-slate-300 bg-ui-card border border-ui-border shadow-sm hover:bg-transparentest cursor-pointer flex items-center group">
-                                    {isLoading ? (
-                                        <>
-                                            <svg className="animate-spin h-4 w-4 text-slate-400 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                            </svg>
-                                            <span>Subiendo...</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <UploadIcon className="w-4 h-4 mr-2" />
-                                            <span>Subir Datos</span>
-                                        </>
-                                    )}
-                                    <input 
-                                        type="file" 
-                                        className="hidden" 
-                                        onChange={(e) => {
-                                            if (e.target.files && e.target.files.length > 0) {
-                                                handleFileParse(e.target.files[0]);
-                                            }
-                                        }} 
-                                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
-                                        disabled={isLoading}
-                                    />
-                                </label>
-                            </div>
-                        </div>
                         
                         <div className="max-w-[1600px] mx-auto p-4 bg-transparent" id="report-content">
                             {isGeneratingPdf && (
