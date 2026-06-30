@@ -10,15 +10,24 @@ async function startServer() {
   // Body parsers with limits
   app.use(express.json({ limit: '10mb' }));
 
-  // Initialize Gemini API with named parameter and proper User-Agent header
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      }
+  let aiClient: GoogleGenAI | null = null;
+  function getAiClient() {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("Falta la configuración de la clave API de Gemini. Por favor, añada GEMINI_API_KEY en la sección 'Secrets' de AI Studio (menú superior derecho) y reinicie el servidor de desarrollo.");
     }
-  });
+    if (!aiClient) {
+      aiClient = new GoogleGenAI({
+        apiKey: apiKey,
+        httpOptions: {
+          headers: {
+            'User-Agent': 'aistudio-build',
+          }
+        }
+      });
+    }
+    return aiClient;
+  }
 
   // API Route: AI analysis
   app.post("/api/analyze", async (req, res) => {
@@ -27,6 +36,16 @@ async function startServer() {
       
       if (!prompt) {
         return res.status(400).json({ error: "El prompt es requerido." });
+      }
+
+      let ai;
+      try {
+        ai = getAiClient();
+      } catch (keyErr: any) {
+        return res.status(500).json({
+          error: "Clave de API no configurada",
+          details: keyErr.message
+        });
       }
 
       // Format the system instruction with rich context about the materials data

@@ -162,7 +162,14 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category }
       });
 
       if (!response.ok) {
-        throw new Error('No se pudo conectar con el servicio de análisis de IA.');
+        let errMsg = 'No se pudo conectar con el servicio de análisis de IA.';
+        try {
+          const errData = await response.json();
+          if (errData.error) {
+            errMsg = `${errData.error}${errData.details ? `: ${errData.details}` : ''}`;
+          }
+        } catch (_) {}
+        throw new Error(errMsg);
       }
 
       const resultData = await response.json();
