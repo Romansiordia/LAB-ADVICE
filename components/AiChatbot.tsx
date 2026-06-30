@@ -1,0 +1,414 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { Sparkles, Send, X, Trash2, Download, Bot, User, ArrowRightLeft } from 'lucide-react';
+import { RawMaterialData } from '../types';
+import { NUTRIENTS } from '../constants';
+import { REFERENCE_VALUES } from '../reference-values';
+
+declare const marked: any;
+
+interface AiChatbotProps {
+  material: string;
+  data: RawMaterialData[];
+  category: 'nutrients' | 'mycotoxins';
+}
+
+interface Message {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: Date;
+}
+
+export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // Generate dynamic stats summary for the AI context
+  const getStatsSummary = () => {
+    if (!data || data.length === 0) return { material, totalRecords: 0, parameters: [] };
+
+    const refValues = REFERENCE_VALUES[material] || null;
+    const filteredNutrients = NUTRIENTS.filter(n => (n.category || 'nutrients') === category);
+
+    const parameters = filteredNutrients.map(nutrient => {
+      const values = data
+        .map(d => d[nutrient.key])
+        .filter((v): v is number => typeof v === 'number' && !isNaN(v) && v !== 0);
+
+      if (values.length === 0) return null;
+
+      const count = values.length;
+      const sum = values.reduce((a, b) => a + b, 0);
+      const mean = sum / count;
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+
+      // Variance & StdDev
+      const squaredDiffs = values.map(val => (val - mean) ** 2);
+      const variance = squaredDiffs.reduce((acc, val) => acc + val, 0) / (count > 1 ? count - 1 : 1);
+      const stdDev = Math.sqrt(variance);
+
+      let status = 'normal';
+      if (refValues && refValues[nutrient.key]) {
+        const range = refValues[nutrient.key];
+        if (mean < range.min) status = 'bajo';
+        else if (mean > range.max) status = 'alto';
+      }
+
+      return {
+        label: nutrient.label.replace(' (%)', ''),
+        key: nutrient.key,
+        promedio: mean.toFixed(2),
+        minimo: min.toFixed(2),
+        maximo: max.toFixed(2),
+        desvEstandar: stdDev.toFixed(2),
+        muestras: count,
+        estado: status,
+      };
+    }).filter(p => p !== null);
+
+    // Also extract some high-level info on suppliers if available
+    const suppliers: Record<string, { count: number; avgValue: number }> = {};
+    data.forEach(d => {
+      if (d.Proveedor && typeof d.Proveedor === 'string') {
+        if (!suppliers[d.Proveedor]) {
+          suppliers[d.Proveedor] = { count: 0, avgValue: 0 };
+        }
+        suppliers[d.Proveedor].count++;
+      }
+    });
+
+    return {
+      material,
+      registrosTotales: data.length,
+      categoriaAnalizada: category === 'nutrients' ? 'Nutrientes' : 'Micotoxinas',
+      proveedoresIdentificados: Object.keys(suppliers),
+      parametros: parameters,
+    };
+  };
+
+  // Add a welcoming message when the chat starts or material changes
+  useEffect(() => {
+    if (messages.length === 0) {
+      setMessages([
+        {
+          id: 'welcome',
+          role: 'assistant',
+          content: `¡Hola! Soy tu **Asistente de IA de Control de Calidad**. 🌾🧪\n\nVeo que tienes seleccionado **${material}** con **${data.length}** registros. He analizado el resumen de calidad de la categoría **${category === 'nutrients' ? 'Nutrientes' : 'Micotoxinas'}**.\n\n¿En qué puedo ayudarte hoy? Puedes hacerme preguntas como:\n- *¿Ves alguna anomalía o riesgo en las micotoxinas?*\n- *¿Cuáles son los parámetros nutricionales con mayor desviación?*\n- *¿Qué lote o proveedor muestra el mejor comportamiento de calidad?*`,
+          timestamp: new Date(),
+        },
+      ]);
+    }
+  }, [material, category, data.length, messages.length]);
+
+  // Reset chat when material or category changes, to provide fresh analysis
+  const handleResetChat = () => {
+    setMessages([
+      {
+        id: 'welcome-reset-' + Date.now(),
+        role: 'assistant',
+        content: `He reiniciado el contexto de análisis para **${material}** (${category === 'nutrients' ? 'Nutrientes' : 'Micotoxinas'}).\n\n¿Qué te gustaría analizar de este material?`,
+        timestamp: new Date(),
+      },
+    ]);
+    setError(null);
+  };
+
+  // Scroll to bottom on new message
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isLoading]);
+
+  const handleSendMessage = async (textToSend?: string) => {
+    const promptText = textToSend || inputValue;
+    if (!promptText.trim() || isLoading) return;
+
+    const userMessage: Message = {
+      id: 'msg-' + Date.now(),
+      role: 'user',
+      content: promptText,
+      timestamp: new Date(),
+    };
+
+    setMessages(prev => [...prev, userMessage]);
+    if (!textToSend) setInputValue('');
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const summary = getStatsSummary();
+      const chatHistoryForBackend = messages.map(msg => ({
+        role: msg.role,
+        content: msg.content,
+      }));
+
+      const response = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          prompt: promptText,
+          material: material,
+          dataSummary: summary,
+          chatHistory: chatHistoryForBackend,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('No se pudo conectar con el servicio de análisis de IA.');
+      }
+
+      const resultData = await response.json();
+
+      if (resultData.error) {
+        throw new Error(resultData.error);
+      }
+
+      const assistantMessage: Message = {
+        id: 'msg-' + (Date.now() + 1),
+        role: 'assistant',
+        content: resultData.text || 'No pude generar una respuesta clara. Intenta reformular tu pregunta.',
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (e: any) {
+      setError(e.message || 'Error desconocido.');
+      console.error(e);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleExportChat = () => {
+    if (messages.length === 0) return;
+
+    let exportText = `REPORTE DE ASISTENCIA IA - ANÁLISIS DE ${material.toUpperCase()}\n`;
+    exportText += `Fecha de generación: ${new Date().toLocaleString()}\n`;
+    exportText += `==================================================\n\n`;
+
+    messages.forEach(msg => {
+      const roleStr = msg.role === 'user' ? 'USUARIO' : 'ASISTENTE IA';
+      exportText += `[${msg.timestamp.toLocaleTimeString()}] ${roleStr}:\n`;
+      exportText += `${msg.content.replace(/\*\*/g, '')}\n`;
+      exportText += `--------------------------------------------------\n\n`;
+    });
+
+    const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `analisis_ia_${material.toLowerCase()}_${Date.now()}.txt`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const renderMarkdown = (text: string) => {
+    if (typeof marked !== 'undefined') {
+      try {
+        return { __html: marked.parse(text) };
+      } catch (e) {
+        console.error(e);
+      }
+    }
+    return { __html: text.replace(/\n/g, '<br />') };
+  };
+
+  const suggestionChips = [
+    { label: '🔍 Analizar micotoxinas', text: 'Haz un diagnóstico detallado de las micotoxinas de este material y detecta posibles niveles críticos.' },
+    { label: '📈 Tendencias de Calidad', text: 'Analiza los promedios nutricionales frente a sus referencias e identifícame parámetros con mayor desviación.' },
+    { label: '⚠️ Detectar anomalías', text: 'Revisa los datos en busca de valores atípicos, lotes sospechosos o desviaciones fuera de rango.' },
+    { label: '⚖️ Comparar proveedores', text: 'Dime cuál proveedor tiene la calidad más homogénea o consistente según los datos cargados.' },
+  ];
+
+  return (
+    <>
+      {/* Floating Chat Trigger Button */}
+      <button
+        id="ai-assistant-trigger"
+        onClick={() => setIsOpen(true)}
+        className="fixed bottom-6 right-6 z-40 bg-ui-accent hover:bg-cyan-400 text-slate-900 rounded-full p-4 shadow-[0_0_20px_rgba(0,222,255,0.4)] transition-all duration-300 hover:scale-110 group flex items-center space-x-2"
+        title="Preguntar al Asistente de IA"
+      >
+        <Sparkles className="w-6 h-6 animate-pulse" />
+        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 ease-in-out font-bold text-sm whitespace-nowrap">
+          Asistente IA
+        </span>
+      </button>
+
+      {/* Slide-out Sidebar Drawer */}
+      <div
+        className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[460px] bg-[#0c1626]/98 border-l border-ui-border shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
+          isOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        {/* Chat Header */}
+        <div className="p-4 border-b border-ui-border bg-ui-card flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="bg-ui-accent/10 p-2 rounded-lg border border-ui-accent/20">
+              <Bot className="w-5 h-5 text-ui-accent" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-100 flex items-center text-sm uppercase tracking-wider">
+                Asistente de Calidad IA
+                <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-ui-accent/20 text-ui-accent font-semibold">
+                  GEMINI 3.5
+                </span>
+              </h3>
+              <p className="text-[11px] text-slate-400 mt-0.5">
+                Analizando {material} • {category === 'nutrients' ? 'Nutrientes' : 'Micotoxinas'}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <button
+              onClick={handleResetChat}
+              className="p-1.5 text-slate-400 hover:text-slate-200 rounded hover:bg-ui-darkest transition-colors"
+              title="Reiniciar chat"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+            <button
+              onClick={handleExportChat}
+              className="p-1.5 text-slate-400 hover:text-slate-200 rounded hover:bg-ui-darkest transition-colors"
+              title="Exportar conversación"
+            >
+              <Download className="w-4 h-4" />
+            </button>
+            <button
+              onClick={() => setIsOpen(false)}
+              className="p-1.5 text-slate-400 hover:text-ui-accent rounded hover:bg-ui-darkest transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+
+        {/* Message Panel */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
+          {messages.map(msg => (
+            <div
+              key={msg.id}
+              className={`flex items-start space-x-3 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
+            >
+              {/* Avatar Icon */}
+              <div
+                className={`p-2 rounded-lg text-xs shrink-0 ${
+                  msg.role === 'user'
+                    ? 'bg-ui-accent/20 border border-ui-accent/40 text-ui-accent'
+                    : 'bg-ui-dark border border-ui-border text-slate-300'
+                }`}
+              >
+                {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+              </div>
+
+              {/* Chat Bubble */}
+              <div className="max-w-[80%] flex flex-col">
+                <div
+                  className={`p-3 rounded-2xl text-xs md:text-[13px] leading-relaxed ${
+                    msg.role === 'user'
+                      ? 'bg-ui-accent/10 border border-ui-accent/30 text-slate-100 rounded-tr-none'
+                      : 'bg-ui-card border border-ui-border text-slate-200 rounded-tl-none prose prose-invert'
+                  }`}
+                >
+                  {msg.role === 'user' ? (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  ) : (
+                    <div dangerouslySetInnerHTML={renderMarkdown(msg.content)} />
+                  )}
+                </div>
+                <span className="text-[9px] text-slate-500 mt-1 self-end px-1">
+                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            </div>
+          ))}
+
+          {/* Loading Indicator */}
+          {isLoading && (
+            <div className="flex items-start space-x-3">
+              <div className="p-2 rounded-lg bg-ui-dark border border-ui-border text-slate-300 shrink-0">
+                <Bot className="w-4 h-4 animate-bounce" />
+              </div>
+              <div className="bg-ui-card border border-ui-border p-4 rounded-2xl rounded-tl-none flex items-center space-x-2">
+                <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce"></div>
+              </div>
+            </div>
+          )}
+
+          {/* Error Message */}
+          {error && (
+            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-xs text-red-400">
+              <p className="font-semibold">Error al conectar con la IA:</p>
+              <p className="mt-1">{error}</p>
+              <button
+                onClick={() => handleSendMessage()}
+                className="mt-2 text-ui-accent underline hover:text-cyan-400 font-medium"
+              >
+                Reintentar
+              </button>
+            </div>
+          )}
+
+          <div ref={chatEndRef} />
+        </div>
+
+        {/* Action Suggestion Chips */}
+        {messages.length > 0 && !isLoading && (
+          <div className="p-3 border-t border-ui-border/50 bg-[#070e1a] flex flex-col space-y-2">
+            <span className="text-[10px] uppercase tracking-wider text-slate-500 px-1 font-semibold">
+              Análisis sugeridos:
+            </span>
+            <div className="flex flex-wrap gap-1.5 overflow-x-auto py-1 max-h-24">
+              {suggestionChips.map((chip, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendMessage(chip.text)}
+                  className="px-2.5 py-1 text-[11px] text-slate-300 bg-ui-card border border-ui-border rounded-full hover:border-ui-accent hover:text-ui-accent transition-all whitespace-nowrap text-left"
+                >
+                  {chip.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Input Form */}
+        <form
+          onSubmit={e => {
+            e.preventDefault();
+            handleSendMessage();
+          }}
+          className="p-3 border-t border-ui-border bg-ui-card flex items-center space-x-2"
+        >
+          <input
+            type="text"
+            value={inputValue}
+            onChange={e => setInputValue(e.target.value)}
+            disabled={isLoading}
+            placeholder="Pregunta algo sobre los datos de calidad..."
+            className="flex-1 bg-ui-darkest border border-ui-border text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3 py-2.5 outline-none focus:ring-1 focus:ring-ui-accent transition-all"
+          />
+          <button
+            type="submit"
+            disabled={!inputValue.trim() || isLoading}
+            className="bg-ui-accent hover:bg-cyan-400 text-slate-900 font-semibold p-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+          >
+            <Send className="w-4 h-4" />
+          </button>
+        </form>
+      </div>
+    </>
+  );
+};

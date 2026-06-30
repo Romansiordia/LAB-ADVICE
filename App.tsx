@@ -13,6 +13,7 @@ import { NUTRIENTS, MYCOTOXIN_THRESHOLDS, SPECIES_LABELS } from './constants';
 import { MycotoxinGauge } from './components/MycotoxinGauge';
 import { SAMPLE_DATA } from './sample-data';
 import { AiAnalysisModal } from './components/AiAnalysisModal';
+import { AiChatbot } from './components/AiChatbot';
 import { SparklesIcon } from './components/icons/SparklesIcon';
 import { MonthlyTrendChart } from './components/MonthlyTrendChart';
 import { CalendarIcon } from './components/icons/CalendarIcon';
@@ -825,6 +826,13 @@ const App: React.FC = () => {
                 material={selectedMaterial}
                 nutrient="General"
             />
+            {rawData.length > 0 && (
+                <AiChatbot 
+                    material={selectedMaterial} 
+                    data={multiTrendData} 
+                    category={selectedCategory} 
+                />
+            )}
         </div>
     );
 };
