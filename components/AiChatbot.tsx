@@ -10,6 +10,7 @@ interface AiChatbotProps {
   material: string;
   data: RawMaterialData[];
   category: 'nutrients' | 'mycotoxins';
+  isGeneratingPdf?: boolean;
 }
 
 interface Message {
@@ -19,7 +20,7 @@ interface Message {
   timestamp: Date;
 }
 
-export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category }) => {
+export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, isGeneratingPdf }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
@@ -245,184 +246,163 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category }
   ];
 
   return (
-    <>
-      {/* Floating Chat Trigger Button */}
-      <button
-        id="ai-assistant-trigger"
-        onClick={() => setIsOpen(true)}
-        className="fixed bottom-6 right-6 z-40 bg-ui-accent hover:bg-cyan-400 text-slate-900 rounded-full p-4 shadow-[0_0_20px_rgba(0,222,255,0.4)] transition-all duration-300 hover:scale-110 group flex items-center space-x-2"
-        title="Preguntar al Asistente de IA"
-      >
-        <Sparkles className="w-6 h-6 animate-pulse" />
-        <span className="max-w-0 overflow-hidden group-hover:max-w-xs transition-all duration-500 ease-in-out font-bold text-sm whitespace-nowrap">
-          Asistente IA
-        </span>
-      </button>
-
-      {/* Slide-out Sidebar Drawer */}
-      <div
-        className={`fixed inset-y-0 right-0 z-50 w-full sm:w-[460px] bg-[#0c1626]/98 border-l border-ui-border shadow-2xl transition-transform duration-300 ease-in-out flex flex-col ${
-          isOpen ? 'translate-x-0' : 'translate-x-full'
-        }`}
-      >
-        {/* Chat Header */}
-        <div className="p-4 border-b border-ui-border bg-ui-card flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="bg-ui-accent/10 p-2 rounded-lg border border-ui-accent/20">
-              <Bot className="w-5 h-5 text-ui-accent" />
-            </div>
-            <div>
-              <h3 className="font-bold text-slate-100 flex items-center text-sm uppercase tracking-wider">
-                Asistente de Calidad IA
-                <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-ui-accent/20 text-ui-accent font-semibold">
-                  GEMINI 3.5
-                </span>
-              </h3>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                Analizando {material} • {category === 'nutrients' ? 'Nutrientes' : 'Micotoxinas'}
-              </p>
-            </div>
+    <div className={`bg-ui-card border border-ui-border rounded-2xl shadow-sm overflow-hidden flex flex-col ${isGeneratingPdf ? 'h-auto' : 'h-[600px]'} mt-8`} id="ai-report-section">
+      {/* Chat Header */}
+      <div className="p-4 border-b border-ui-border bg-[#0c1626] flex items-center justify-between">
+        <div className="flex items-center space-x-3">
+          <div className="bg-ui-accent/10 p-2 rounded-lg border border-ui-accent/20">
+            <Sparkles className="w-5 h-5 text-ui-accent" />
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={handleResetChat}
-              className="p-1.5 text-slate-400 hover:text-slate-200 rounded hover:bg-ui-darkest transition-colors"
-              title="Reiniciar chat"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={handleExportChat}
-              className="p-1.5 text-slate-400 hover:text-slate-200 rounded hover:bg-ui-darkest transition-colors"
-              title="Exportar conversación"
-            >
-              <Download className="w-4 h-4" />
-            </button>
-            <button
-              onClick={() => setIsOpen(false)}
-              className="p-1.5 text-slate-400 hover:text-ui-accent rounded hover:bg-ui-darkest transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div>
+            <h3 className="font-bold text-slate-100 flex items-center text-sm uppercase tracking-wider">
+              Análisis de IA & Reporte General
+              <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-ui-accent/20 text-ui-accent font-semibold">
+                GEMINI
+              </span>
+            </h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Analizando {material} • {category === 'nutrients' ? 'Nutrientes' : 'Micotoxinas'}
+            </p>
           </div>
         </div>
+        <div className="flex items-center space-x-2">
+          <button
+            onClick={handleResetChat}
+            className="p-2 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-ui-darkest transition-colors flex items-center space-x-1"
+            title="Reiniciar análisis"
+          >
+            <Trash2 className="w-4 h-4" />
+            <span className="text-xs hidden md:inline">Reiniciar</span>
+          </button>
+          <button
+            onClick={handleExportChat}
+            className="p-2 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-ui-darkest transition-colors flex items-center space-x-1"
+            title="Exportar conversación"
+          >
+            <Download className="w-4 h-4" />
+            <span className="text-xs hidden md:inline">Exportar Chat</span>
+          </button>
+        </div>
+      </div>
 
-        {/* Message Panel */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
-          {messages.map(msg => (
+      {/* Message Panel */}
+      <div className={`flex-1 ${isGeneratingPdf ? 'overflow-visible' : 'overflow-y-auto'} p-4 space-y-4 custom-scrollbar bg-[#070e1a]/50`}>
+        {messages.map(msg => (
+          <div
+            key={msg.id}
+            className={`flex items-start space-x-3 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
+          >
+            {/* Avatar Icon */}
             <div
-              key={msg.id}
-              className={`flex items-start space-x-3 ${msg.role === 'user' ? 'flex-row-reverse space-x-reverse' : ''}`}
+              className={`p-2 rounded-lg text-xs shrink-0 ${
+                msg.role === 'user'
+                  ? 'bg-ui-accent/20 border border-ui-accent/40 text-ui-accent'
+                  : 'bg-ui-dark border border-ui-border text-slate-300'
+              }`}
             >
-              {/* Avatar Icon */}
+              {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+            </div>
+
+            {/* Chat Bubble */}
+            <div className="max-w-[85%] flex flex-col">
               <div
-                className={`p-2 rounded-lg text-xs shrink-0 ${
+                className={`p-4 rounded-2xl text-sm leading-relaxed ${
                   msg.role === 'user'
-                    ? 'bg-ui-accent/20 border border-ui-accent/40 text-ui-accent'
-                    : 'bg-ui-dark border border-ui-border text-slate-300'
+                    ? 'bg-ui-accent/10 border border-ui-accent/30 text-slate-100 rounded-tr-none'
+                    : 'bg-ui-card border border-ui-border text-slate-200 rounded-tl-none prose prose-invert max-w-none'
                 }`}
               >
-                {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                {msg.role === 'user' ? (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                ) : (
+                  <div dangerouslySetInnerHTML={renderMarkdown(msg.content)} />
+                )}
               </div>
-
-              {/* Chat Bubble */}
-              <div className="max-w-[80%] flex flex-col">
-                <div
-                  className={`p-3 rounded-2xl text-xs md:text-[13px] leading-relaxed ${
-                    msg.role === 'user'
-                      ? 'bg-ui-accent/10 border border-ui-accent/30 text-slate-100 rounded-tr-none'
-                      : 'bg-ui-card border border-ui-border text-slate-200 rounded-tl-none prose prose-invert'
-                  }`}
-                >
-                  {msg.role === 'user' ? (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
-                  ) : (
-                    <div dangerouslySetInnerHTML={renderMarkdown(msg.content)} />
-                  )}
-                </div>
-                <span className="text-[9px] text-slate-500 mt-1 self-end px-1">
-                  {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
+              <span className="text-[10px] text-slate-500 mt-1 self-end px-1">
+                {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
             </div>
-          ))}
+          </div>
+        ))}
 
-          {/* Loading Indicator */}
-          {isLoading && (
-            <div className="flex items-start space-x-3">
-              <div className="p-2 rounded-lg bg-ui-dark border border-ui-border text-slate-300 shrink-0">
-                <Bot className="w-4 h-4 animate-bounce" />
-              </div>
-              <div className="bg-ui-card border border-ui-border p-4 rounded-2xl rounded-tl-none flex items-center space-x-2">
-                <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce [animation-delay:-0.3s]"></div>
-                <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce [animation-delay:-0.15s]"></div>
-                <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce"></div>
-              </div>
+        {/* Loading Indicator */}
+        {isLoading && (
+          <div className="flex items-start space-x-3">
+            <div className="p-2 rounded-lg bg-ui-dark border border-ui-border text-slate-300 shrink-0">
+              <Bot className="w-4 h-4 animate-bounce" />
             </div>
-          )}
-
-          {/* Error Message */}
-          {error && (
-            <div className="p-3 bg-red-950/40 border border-red-500/30 rounded-xl text-xs text-red-400">
-              <p className="font-semibold">Error al conectar con la IA:</p>
-              <p className="mt-1">{error}</p>
-              <button
-                onClick={() => handleSendMessage()}
-                className="mt-2 text-ui-accent underline hover:text-cyan-400 font-medium"
-              >
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          <div ref={chatEndRef} />
-        </div>
-
-        {/* Action Suggestion Chips */}
-        {messages.length > 0 && !isLoading && (
-          <div className="p-3 border-t border-ui-border/50 bg-[#070e1a] flex flex-col space-y-2">
-            <span className="text-[10px] uppercase tracking-wider text-slate-500 px-1 font-semibold">
-              Análisis sugeridos:
-            </span>
-            <div className="flex flex-wrap gap-1.5 overflow-x-auto py-1 max-h-24">
-              {suggestionChips.map((chip, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendMessage(chip.text)}
-                  className="px-2.5 py-1 text-[11px] text-slate-300 bg-ui-card border border-ui-border rounded-full hover:border-ui-accent hover:text-ui-accent transition-all whitespace-nowrap text-left"
-                >
-                  {chip.label}
-                </button>
-              ))}
+            <div className="bg-ui-card border border-ui-border p-4 rounded-2xl rounded-tl-none flex items-center space-x-2">
+              <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+              <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+              <div className="w-2 h-2 bg-ui-accent rounded-full animate-bounce"></div>
             </div>
           </div>
         )}
 
-        {/* Input Form */}
+        {/* Error Message */}
+        {error && (
+          <div className="p-4 bg-red-950/40 border border-red-500/30 rounded-xl text-sm text-red-400 max-w-[85%] ml-11">
+            <p className="font-semibold">Error al conectar con la IA:</p>
+            <p className="mt-1">{error}</p>
+            <button
+              onClick={() => handleSendMessage()}
+              className="mt-2 text-ui-accent underline hover:text-cyan-400 font-medium"
+            >
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Action Suggestion Chips */}
+      {messages.length > 0 && !isLoading && (
+        <div className="p-3 border-t border-ui-border bg-[#0c1626] flex flex-col space-y-2">
+          <span className="text-[10px] uppercase tracking-wider text-slate-500 px-1 font-semibold">
+            Análisis sugeridos rápidos:
+          </span>
+          <div className="flex flex-wrap gap-2 overflow-x-auto py-1">
+            {suggestionChips.map((chip, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSendMessage(chip.text)}
+                className="px-3 py-1.5 text-xs text-slate-300 bg-ui-card border border-ui-border rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all whitespace-nowrap text-left"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Input Form */}
+      {!isGeneratingPdf && (
         <form
           onSubmit={e => {
             e.preventDefault();
             handleSendMessage();
           }}
-          className="p-3 border-t border-ui-border bg-ui-card flex items-center space-x-2"
+          className="p-4 border-t border-ui-border bg-ui-card flex items-center space-x-3"
         >
           <input
             type="text"
             value={inputValue}
             onChange={e => setInputValue(e.target.value)}
             disabled={isLoading}
-            placeholder="Pregunta algo sobre los datos de calidad..."
-            className="flex-1 bg-ui-darkest border border-ui-border text-slate-100 placeholder-slate-500 text-xs rounded-xl px-3 py-2.5 outline-none focus:ring-1 focus:ring-ui-accent transition-all"
+            placeholder="Pregunta algo sobre los datos de calidad o pide un reporte general..."
+            className="flex-1 bg-ui-darkest border border-ui-border text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-3 outline-none focus:ring-1 focus:ring-ui-accent transition-all"
           />
           <button
             type="submit"
             disabled={!inputValue.trim() || isLoading}
-            className="bg-ui-accent hover:bg-cyan-400 text-slate-900 font-semibold p-2.5 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
+            className="bg-ui-accent hover:bg-cyan-400 text-slate-900 font-semibold p-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 flex items-center space-x-2"
           >
+            <span className="hidden sm:inline">Enviar</span>
             <Send className="w-4 h-4" />
           </button>
         </form>
-      </div>
-    </>
+      )}
+    </div>
   );
 };

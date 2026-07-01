@@ -461,6 +461,21 @@ const App: React.FC = () => {
                                         ))}
                                     </select>
                                     <button
+                                        onClick={() => {
+                                            startTransition(() => {
+                                                setCurrentView('statistics');
+                                            });
+                                            setTimeout(() => {
+                                                document.getElementById('ai-report-section')?.scrollIntoView({ behavior: 'smooth' });
+                                            }, 100);
+                                        }}
+                                        className="flex items-center justify-center bg-ui-darkest border border-ui-accent/50 text-ui-accent py-2.5 px-4 rounded-lg hover:bg-ui-accent/10 transition-all shrink-0 font-semibold"
+                                        title="Ver Asistente IA"
+                                    >
+                                        <SparklesIcon />
+                                        <span className="ml-2 hidden sm:inline">Reporte IA</span>
+                                    </button>
+                                    <button
                                         onClick={handleGeneratePdf}
                                         className="flex items-center justify-center bg-ui-darkest border border-ui-border text-slate-300 py-2.5 px-4 rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all shrink-0"
                                         disabled={multiTrendData.length === 0 || isLoading || isGeneratingPdf}
@@ -489,10 +504,6 @@ const App: React.FC = () => {
                                     </h2>
                                     <div className="border text-sm max-w-full overflow-auto border-ui-border rounded-xl p-4">
                                         <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
-                                    </div>
-                                    <div className="mt-8 border-t border-ui-border pt-6">
-                                        <h2 className="text-xl font-bold text-slate-100 mb-2">Análisis Gráfico</h2>
-                                        <p className="text-slate-400 mb-6 text-sm">Desglose de tendencias, distribuciones y análisis de proveedores.</p>
                                     </div>
                                 </div>
                             )}
@@ -662,7 +673,7 @@ const App: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {(isGeneratingPdf || currentView === 'general') && (
+                                    {(!isGeneratingPdf && currentView === 'general') && (
                                         <div className="animate-fade-in mt-8">
                                             <div className="mb-6 px-1">
                                                 <h2 className="text-xl font-bold text-slate-100">Tendencias de Parámetros</h2>
@@ -699,7 +710,7 @@ const App: React.FC = () => {
                                         </div>
                                     )}
 
-                                    {(isGeneratingPdf || currentView === 'histograms') && (
+                                    {(!isGeneratingPdf && currentView === 'histograms') && (
                                         <div className="animate-fade-in mt-8">
                                             <div className="mb-6 px-1">
                                                 <h2 className="text-xl font-bold text-slate-100">Distribución de Parámetros</h2>
@@ -738,7 +749,7 @@ const App: React.FC = () => {
                                     )}                                </div>
                             )}
 
-                            {(isGeneratingPdf || currentView === 'monthly_trends') && (
+                            {(!isGeneratingPdf && currentView === 'monthly_trends') && (
                                 <div className="animate-fade-in mt-8">
                                     <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
                                         <CalendarIcon />
@@ -755,19 +766,31 @@ const App: React.FC = () => {
                                 </div>
                             )}
                             
-                            {(currentView === 'statistics' && !isGeneratingPdf) && (
-                                <div className="animate-fade-in mt-8">
-                                    <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
-                                        <TableIcon />
-                                        <span className="ml-2">Estadísticas Descriptivas</span>
-                                    </h2>
-                <div className="bg-ui-card border text-sm max-w-full overflow-auto border-ui-border rounded-2xl p-6 shadow-sm">
-                    <h3 className="text-slate-300 font-semibold mb-4 text-sm uppercase tracking-widest flex items-center">
-                        <span className="mr-2"><TableIcon /></span> 
-                        Tabla de Calidad: {selectedMaterial}
-                    </h3>
-                    <NutrientStatsTable data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
-                </div>
+                            {(isGeneratingPdf || currentView === 'statistics') && (
+                                <div className="animate-fade-in mt-8 space-y-8">
+                                    <div>
+                                        <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
+                                            <TableIcon />
+                                            <span className="ml-2">Estadísticas Descriptivas</span>
+                                        </h2>
+                                        <div className="bg-ui-card border text-sm max-w-full overflow-auto border-ui-border rounded-2xl p-6 shadow-sm">
+                                            <h3 className="text-slate-300 font-semibold mb-4 text-sm uppercase tracking-widest flex items-center">
+                                                <span className="mr-2"><TableIcon /></span> 
+                                                Tabla de Calidad: {selectedMaterial}
+                                            </h3>
+                                            <NutrientStatsTable data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
+                                        </div>
+                                    </div>
+
+                                    {/* AI Report integrated into statistics and PDF */}
+                                    {rawData.length > 0 && (
+                                        <AiChatbot 
+                                            material={selectedMaterial} 
+                                            data={multiTrendData} 
+                                            category={selectedCategory} 
+                                            isGeneratingPdf={isGeneratingPdf}
+                                        />
+                                    )}
                                 </div>
                             )}
 
@@ -817,22 +840,6 @@ const App: React.FC = () => {
             </ChartZoomModal>
 
             <DataFormatModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-            <AiAnalysisModal 
-                isOpen={isAiModalOpen} 
-                onClose={() => setIsAiModalOpen(false)} 
-                isLoading={isAiLoading}
-                result={aiAnalysisResult}
-                error={aiError}
-                material={selectedMaterial}
-                nutrient="General"
-            />
-            {rawData.length > 0 && (
-                <AiChatbot 
-                    material={selectedMaterial} 
-                    data={multiTrendData} 
-                    category={selectedCategory} 
-                />
-            )}
         </div>
     );
 };
