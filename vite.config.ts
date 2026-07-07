@@ -106,6 +106,194 @@ Instrucciones para las respuestas:
           }
         });
       });
+
+      server.middlewares.use('/api/login', async (req: any, res: any) => {
+        if (req.method !== 'POST') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        let body = '';
+        req.on('data', (chunk: any) => {
+          body += chunk;
+        });
+
+        req.on('end', async () => {
+          try {
+            const { username, password } = JSON.parse(body || '{}');
+            if (!username || !password) {
+              res.statusCode = 400;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'Usuario y contraseña son requeridos.' }));
+              return;
+            }
+
+            const cleanUsername = username.trim().toLowerCase();
+            const cleanPassword = password.trim();
+
+            const fallbackUsers = [
+              { usuario: 'admin', contrasena: 'admin123', nombre: 'Administrador' },
+              { usuario: 'romansiordias@gmail.com', contrasena: 'lab123', nombre: 'Román Siordia' }
+            ];
+
+            const sheetUrl = process.env.GOOGLE_SHEET_CSV_URL || process.env.GOOGLE_SHEETS_CSV_URL;
+
+            if (!sheetUrl) {
+              const found = fallbackUsers.find(u => u.usuario === cleanUsername && u.contrasena === cleanPassword);
+              if (found) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  success: true,
+                  user: { nombre: found.nombre, usuario: found.usuario },
+                  message: 'Autenticado con credenciales de prueba (GOOGLE_SHEET_CSV_URL no configurado).'
+                }));
+                return;
+              }
+              res.statusCode = 401;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ success: false, error: 'Credenciales incorrectas (modo de prueba activo).' }));
+              return;
+            }
+
+            let csvText = '';
+            try {
+              const fetchResponse = await fetch(sheetUrl);
+              if (!fetchResponse.ok) {
+                throw new Error(`Google Sheets respondió con código ${fetchResponse.status}`);
+              }
+              csvText = await fetchResponse.text();
+            } catch (fetchErr: any) {
+              console.error('Error al descargar Google Sheet CSV:', fetchErr);
+              const found = fallbackUsers.find(u => u.usuario === cleanUsername && u.contrasena === cleanPassword);
+              if (found) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  success: true,
+                  user: { nombre: found.nombre, usuario: found.usuario },
+                  message: 'Autenticado con credenciales de prueba (Fallo al descargar la hoja de cálculo).'
+                }));
+                return;
+              }
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                error: 'No se pudo conectar con la base de datos de Google Sheets.',
+                details: fetchErr.message
+              }));
+              return;
+            }
+
+            const lines = csvText.split(/\r?\n/);
+            if (lines.length === 0 || !lines[0]) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({ error: 'La hoja de cálculo está vacía o es inválida.' }));
+              return;
+            }
+
+            const parseCSVLine = (line: string): string[] => {
+              const result: string[] = [];
+              let current = '';
+              let inQuotes = false;
+              for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                if (char === '"') {
+                  inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                  result.push(current);
+                  current = '';
+                } else {
+                  current += char;
+                }
+              }
+              result.push(current);
+              return result.map(val => val.replace(/^"|"$/g, '').replace(/""/g, '"').trim());
+            };
+
+            const normalizeKey = (key: string): string => {
+              return key
+                .trim()
+                .toLowerCase()
+                .normalize('NFD')
+                .replace(/[\u0300-\u036f]/g, '');
+            };
+
+            const headers = parseCSVLine(lines[0]).map(normalizeKey);
+            const userIdx = headers.findIndex(h => h.includes('usuario') || h.includes('user') || h.includes('email'));
+            const passIdx = headers.findIndex(h => h.includes('contrasena') || h.includes('password') || h.includes('pass'));
+            const nameIdx = headers.findIndex(h => h.includes('nombre') || h.includes('name'));
+
+            if (userIdx === -1 || passIdx === -1) {
+              res.statusCode = 500;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                error: 'Formato de Google Sheet incorrecto.',
+                details: 'La hoja debe contener al menos las columnas: "usuario" y "contraseña".'
+              }));
+              return;
+            }
+
+            let authenticatedUser = null;
+
+            for (let i = 1; i < lines.length; i++) {
+              const line = lines[i].trim();
+              if (!line) continue;
+
+              const cols = parseCSVLine(line);
+              const rowUser = (cols[userIdx] || '').toLowerCase().trim();
+              const rowPass = (cols[passIdx] || '').trim();
+              const rowName = nameIdx !== -1 ? (cols[nameIdx] || '').trim() : '';
+
+              if (rowUser === cleanUsername && rowPass === cleanPassword) {
+                authenticatedUser = {
+                  usuario: rowUser,
+                  nombre: rowName || rowUser
+                };
+                break;
+              }
+            }
+
+            if (authenticatedUser) {
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: true,
+                user: authenticatedUser
+              }));
+            } else {
+              const found = fallbackUsers.find(u => u.usuario === cleanUsername && u.contrasena === cleanPassword);
+              if (found) {
+                res.statusCode = 200;
+                res.setHeader('Content-Type', 'application/json');
+                res.end(JSON.stringify({
+                  success: true,
+                  user: { nombre: found.nombre, usuario: found.usuario },
+                  message: 'Autenticado con credenciales de prueba.'
+                }));
+                return;
+              }
+
+              res.statusCode = 401;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                success: false,
+                error: 'Usuario o contraseña incorrectos.'
+              }));
+            }
+          } catch (error: any) {
+            console.error('Error in local login route:', error);
+            res.statusCode = 500;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+              error: 'Error interno del servidor.',
+              details: error?.message || String(error)
+            }));
+          }
+        });
+      });
     }
   };
 }
@@ -113,6 +301,12 @@ Instrucciones para las respuestas:
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
     const geminiKey = env.GEMINI_API_KEY || '';
+    
+    // Propagate sheet url to process.env in development server context
+    const sheetUrl = env.GOOGLE_SHEET_CSV_URL || env.GOOGLE_SHEETS_CSV_URL || '';
+    process.env.GOOGLE_SHEET_CSV_URL = sheetUrl;
+    process.env.GOOGLE_SHEETS_CSV_URL = sheetUrl;
+
     return {
       server: {
         port: 3000,

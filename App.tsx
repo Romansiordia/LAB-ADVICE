@@ -2,6 +2,7 @@
 import React, { useState, useMemo, useEffect, startTransition } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { Sidebar } from './components/Sidebar';
+import { LoginScreen } from './components/LoginScreen';
 import { MultiTrendChart } from './components/MultiTrendChart';
 import { TrendChart } from './components/TrendChart';
 import { HistogramChart } from './components/HistogramChart';
@@ -82,6 +83,25 @@ const parseDateDDMMYYYY = (dateInput: any): Date | null => {
 };
 
 const App: React.FC = () => {
+    const [user, setUser] = useState<{ nombre: string; usuario: string } | null>(() => {
+        try {
+            const saved = localStorage.getItem('authenticated_user');
+            return saved ? JSON.parse(saved) : null;
+        } catch {
+            return null;
+        }
+    });
+
+    const handleLogout = () => {
+        localStorage.removeItem('authenticated_user');
+        setUser(null);
+    };
+
+    const handleLoginSuccess = (userData: { nombre: string; usuario: string }) => {
+        localStorage.setItem('authenticated_user', JSON.stringify(userData));
+        setUser(userData);
+    };
+
     const [rawData, setRawData] = useState<RawMaterialData[]>(SAMPLE_DATA);
     const [isLoading, setIsLoading] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
@@ -312,9 +332,15 @@ const App: React.FC = () => {
         }
     }, [zoomConfig, multiTrendData]);
 
+    if (!user) {
+        return <LoginScreen onLoginSuccess={handleLoginSuccess} />;
+    }
+
     return (
         <div className="min-h-screen bg-transparent text-slate-100 flex flex-col md:flex-row overflow-hidden">
             <Sidebar
+                user={user}
+                onLogout={handleLogout}
                 onFileParse={handleFileParse}
                 selectedMaterial={selectedMaterial}
                 setSelectedMaterial={setSelectedMaterial}

@@ -70,6 +70,8 @@ interface SidebarProps {
 
     isCollapsed: boolean;
     onToggleCollapse: () => void;
+    user?: { nombre: string; usuario: string } | null;
+    onLogout?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -102,7 +104,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     endDate,
     setEndDate,
     isCollapsed,
-    onToggleCollapse
+    onToggleCollapse,
+    user = null,
+    onLogout
 }) => {
     const handleClearDates = () => {
         setStartDate(null);
@@ -215,6 +219,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         </div>
                     )}
                 </div>
+                
+                {user && (
+                    <div className="mt-auto pt-4 border-t border-ui-border/50 flex flex-col space-y-3 flex-shrink-0">
+                        <div className="flex items-center space-x-3 bg-ui-darkest/40 p-2.5 rounded-xl border border-ui-border/30">
+                            <div className="w-9 h-9 rounded-full bg-ui-accent/10 border border-ui-accent/20 flex items-center justify-center text-ui-accent font-bold text-sm shrink-0 uppercase">
+                                {user.nombre.charAt(0)}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                                <p className="text-xs font-bold text-slate-200 truncate">{user.nombre}</p>
+                                <p className="text-[10px] text-slate-500 truncate">{user.usuario}</p>
+                            </div>
+                        </div>
+                        <button
+                            onClick={onLogout}
+                            className="w-full bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/30 font-bold py-2 px-4 rounded-xl text-xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                            </svg>
+                            <span>Cerrar Sesión</span>
+                        </button>
+                    </div>
+                )}
             </div>
         </aside>
     );
