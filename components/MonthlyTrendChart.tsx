@@ -6,9 +6,10 @@ interface MonthlyTrendChartProps {
     data: { date: string, value: number }[];
     nutrient: string;
     isCompact?: boolean;
+    showAxes?: boolean;
 }
 
-export const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data, nutrient, isCompact = false }) => {
+export const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data, nutrient, isCompact = false, showAxes = false }) => {
     const stats = useMemo(() => {
         if (!data || data.length === 0) return null;
         
@@ -36,32 +37,32 @@ export const MonthlyTrendChart: React.FC<MonthlyTrendChartProps> = ({ data, nutr
         <ResponsiveContainer width="100%" height="100%">
             <LineChart
                 data={data}
-                margin={isCompact ? { top: 10, right: 10, left: 10, bottom: 5 } : {
-                    top: 5,
-                    right: 30,
-                    left: 0,
+                margin={(isCompact && !showAxes) ? { top: 10, right: 10, left: 10, bottom: 5 } : {
+                    top: 10,
+                    right: 25,
+                    left: -15,
                     bottom: 5,
                 }}
             >
-                {!isCompact && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />}
+                {(!isCompact || showAxes) && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />}
                 <XAxis 
                     dataKey="date" 
                     tickFormatter={formatDate} 
                     stroke="#94a3b8" 
-                    fontSize={12} 
+                    fontSize={10} 
                     fontWeight={500}
                     tick={{ fill: '#cbd5e1' }}
-                    hide={isCompact} 
+                    hide={isCompact && !showAxes} 
                 />
-                {isCompact && <XAxis dataKey="date" hide={false} tick={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} height={1} />}
+                {isCompact && !showAxes && <XAxis dataKey="date" hide={false} tick={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} height={1} />}
                 
                 <YAxis 
                     stroke="#94a3b8" 
-                    fontSize={12} 
+                    fontSize={10} 
                     fontWeight={500}
                     tick={{ fill: '#cbd5e1' }}
                     domain={['dataMin - 1', 'dataMax + 1']} 
-                    hide={isCompact}
+                    hide={isCompact && !showAxes}
                 />
                 
                 <Tooltip 

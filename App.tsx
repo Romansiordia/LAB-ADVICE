@@ -145,23 +145,12 @@ const App: React.FC = () => {
                 });
                 const imgData = canvas.toDataURL('image/png');
                 
-                const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
+                // Generar un PDF continuo (una sola página) con altura adaptada para evitar saltos de página que corten elementos
+                const pdfWidth = 210; // Ancho estándar A4 en mm
                 const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
                 
-                let heightLeft = pdfHeight;
-                let position = 0;
-                const pageHeight = pdf.internal.pageSize.getHeight();
-                
-                pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-                heightLeft -= pageHeight;
-                
-                while (heightLeft > 0) {
-                    position = heightLeft - pdfHeight;
-                    pdf.addPage();
-                    pdf.addImage(imgData, 'PNG', 0, position, pdfWidth, pdfHeight);
-                    heightLeft -= pageHeight;
-                }
+                const pdf = new jsPDF('p', 'mm', [pdfWidth, pdfHeight]);
+                pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
                 
                 pdf.save(`Reporte_Calidad_${selectedMaterial}_${new Date().toISOString().split('T')[0]}.pdf`);
             }
@@ -808,13 +797,12 @@ const App: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    {/* AI Report integrated into statistics and PDF */}
-                                    {rawData.length > 0 && (
+                                    {/* AI Chatbot - Excluido del PDF para ahorrar espacio y mejorar formato */}
+                                    {rawData.length > 0 && !isGeneratingPdf && (
                                         <AiChatbot 
                                             material={selectedMaterial} 
                                             data={multiTrendData} 
                                             category={selectedCategory} 
-                                            isGeneratingPdf={isGeneratingPdf}
                                         />
                                     )}
                                 </div>
@@ -856,6 +844,7 @@ const App: React.FC = () => {
                                                                 data={chartData} 
                                                                 nutrient={cleanLabel} 
                                                                 isCompact={true}
+                                                                showAxes={true}
                                                             />
                                                         </div>
                                                     </div>
@@ -888,6 +877,7 @@ const App: React.FC = () => {
                                                                 data={chartData} 
                                                                 nutrient={cleanLabel} 
                                                                 isCompact={true}
+                                                                showAxes={true}
                                                             />
                                                         </div>
                                                     </div>
