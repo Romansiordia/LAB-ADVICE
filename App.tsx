@@ -829,6 +829,74 @@ const App: React.FC = () => {
                                     <SupplierAnalysis data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
                                 </div>
                             )}
+
+                            {isGeneratingPdf && (
+                                <div className="mt-8 space-y-8">
+                                    <div className="border-t border-ui-border/50 pt-8">
+                                        <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
+                                            <CalendarIcon />
+                                            <span className="ml-2">Tendencias Mensuales: Parámetros Nutricionales</span>
+                                        </h2>
+                                        <p className="text-xs text-slate-400 mb-6 px-1 ml-7">
+                                            Historial consolidado mes a mes de los componentes nutricionales del material actual.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-6">
+                                            {NUTRIENTS.filter(n => (n.category || 'nutrients') === 'nutrients').map((nutrient) => {
+                                                const chartData = getMonthlyData(multiTrendData, nutrient.key);
+                                                if (chartData.length === 0) return null;
+                                                const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
+                                                return (
+                                                    <div key={`pdf-monthly-${nutrient.key}`} className="bg-ui-card border border-ui-border rounded-xl p-4 shadow-sm flex flex-col h-[260px]">
+                                                        <h3 className="text-xs font-bold text-slate-300 mb-3 uppercase tracking-wider flex items-center">
+                                                            <span className="mr-1.5">{getNutrientIcon(nutrient.key, "w-3.5 h-3.5 text-ui-accent")}</span>
+                                                            {cleanLabel} ({nutrient.label.includes('%') ? '%' : nutrient.label.includes('ppm') ? 'ppm' : 'ppb'})
+                                                        </h3>
+                                                        <div className="flex-1 min-h-0">
+                                                            <MonthlyTrendChart 
+                                                                data={chartData} 
+                                                                nutrient={cleanLabel} 
+                                                                isCompact={true}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+
+                                    <div className="border-t border-ui-border/50 pt-8">
+                                        <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
+                                            <CalendarIcon />
+                                            <span className="ml-2">Tendencias Mensuales: Micotoxinas</span>
+                                        </h2>
+                                        <p className="text-xs text-slate-400 mb-6 px-1 ml-7">
+                                            Historial consolidado mes a mes del nivel de micotoxinas detectado en las muestras.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-6">
+                                            {NUTRIENTS.filter(n => (n.category || 'nutrients') === 'mycotoxins').map((nutrient) => {
+                                                const chartData = getMonthlyData(multiTrendData, nutrient.key);
+                                                if (chartData.length === 0) return null;
+                                                const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
+                                                return (
+                                                    <div key={`pdf-monthly-myco-${nutrient.key}`} className="bg-ui-card border border-ui-border rounded-xl p-4 shadow-sm flex flex-col h-[260px]">
+                                                        <h3 className="text-xs font-bold text-slate-300 mb-3 uppercase tracking-wider flex items-center">
+                                                            <span className="mr-1.5">{getNutrientIcon(nutrient.key, "w-3.5 h-3.5 text-ui-accent")}</span>
+                                                            {cleanLabel} ({nutrient.label.includes('ppb') ? 'ppb' : 'ppm'})
+                                                        </h3>
+                                                        <div className="flex-1 min-h-0">
+                                                            <MonthlyTrendChart 
+                                                                data={chartData} 
+                                                                nutrient={cleanLabel} 
+                                                                isCompact={true}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </>
                 )}
