@@ -161,8 +161,7 @@ const App: React.FC = () => {
         }
     };
 
-    const firstSampleMaterial = SAMPLE_DATA.length > 0 ? SAMPLE_DATA[0].material : '';
-    const [selectedMaterial, setSelectedMaterial] = useState<string>(firstSampleMaterial);
+    const [selectedMaterial, setSelectedMaterial] = useState<string>(ALL_FILTER);
     const [currentView, setCurrentView] = useState<ViewMode>('general');
     const [selectedCategory, setSelectedCategory] = useState<'nutrients' | 'mycotoxins'>('nutrients');
     const [selectedSpecies, setSelectedSpecies] = useState<string>('betail');
@@ -236,7 +235,7 @@ const App: React.FC = () => {
                     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
                 if(formattedData.length === 0) throw new Error('No se encontraron datos válidos. Revisa el formato de fecha (DD/MM/AAAA) y las columnas requeridas (date, material).');
                 setRawData(formattedData);
-                setSelectedMaterial(formattedData[0].material);
+                setSelectedMaterial(ALL_FILTER);
             } catch (e: any) {
                 setError(`Error: ${e.message}`);
             } finally {
@@ -250,7 +249,7 @@ const App: React.FC = () => {
     const multiTrendData = useMemo(() => {
         return rawData.filter(d => {
             const itemDateStr = d.date.substring(0, 10);
-            return d.material === selectedMaterial && 
+            return (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && 
                 (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
                 (selectedLote === ALL_FILTER || d.lote === selectedLote) &&
                 (selectedCliente === ALL_FILTER || d.Cliente === selectedCliente) &&
@@ -261,10 +260,14 @@ const App: React.FC = () => {
         });
     }, [rawData, selectedMaterial, selectedSubtipo, selectedLote, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
 
-    const availableMaterials = useMemo(() => [...new Set(rawData.map(d => d.material))], [rawData]);
+    const availableMaterials = useMemo(() => {
+        if (rawData.length === 0) return [];
+        return [ALL_FILTER, ...new Set(rawData.map(d => d.material))];
+    }, [rawData]);
+
     const availableNutrientsFull = useMemo(() => {
         if (rawData.length === 0) return [];
-        return NUTRIENTS.filter(n => rawData.some(d => d.material === selectedMaterial && d[n.key] !== undefined));
+        return NUTRIENTS.filter(n => rawData.some(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d[n.key] !== undefined));
     }, [rawData, selectedMaterial]);
 
     const availableNutrients = useMemo(() => {
@@ -275,7 +278,7 @@ const App: React.FC = () => {
     const activeCategoryNutrients = availableNutrients;
     
     const createFilterOptions = (key: keyof RawMaterialData) => useMemo(() => {
-        const values = new Set(rawData.filter(d => d.material === selectedMaterial && d[key]).map(d => d[key] as string));
+        const values = new Set(rawData.filter(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d[key]).map(d => d[key] as string));
         return [ALL_FILTER, ...Array.from(values)];
     }, [rawData, selectedMaterial]);
     
