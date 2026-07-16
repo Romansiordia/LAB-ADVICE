@@ -11,6 +11,14 @@ import {
   UserCheck
 } from 'lucide-react';
 
+interface ParameterComparison {
+  key: string;
+  label: string;
+  clientMean: number;
+  globalMean: number;
+  diffPct: number;
+}
+
 interface ClientComparisonProps {
   clientName: string;
   category: 'nutrients' | 'mycotoxins';
@@ -21,6 +29,7 @@ interface ClientComparisonProps {
     rejectionDiff: number;
     clientSamples: number;
     globalSamples: number;
+    parameterBreakdown: ParameterComparison[];
   } | null;
 }
 
@@ -37,6 +46,13 @@ export const ClientComparison: React.FC<ClientComparisonProps> = ({ clientName, 
   // KPI 2: Outlier / Rejection rate difference
   // For both categories, a lower rejection rate than global is GOOD (negative rejectionDiff).
   const isKpi2Positive = kpis.rejectionDiff < 0;
+
+  // Smart dynamic decimal formatting based on magnitude
+  const formatVal = (val: number) => {
+    if (val === 0) return '0.00';
+    if (Math.abs(val) < 10) return val.toFixed(3);
+    return val.toFixed(2);
+  };
 
   return (
     <div 
@@ -67,7 +83,7 @@ export const ClientComparison: React.FC<ClientComparisonProps> = ({ clientName, 
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
         {/* KPI Card 1: Concentration / Quality Deviation */}
         <div 
           id="kpi-card-deviation" 
@@ -161,6 +177,66 @@ export const ClientComparison: React.FC<ClientComparisonProps> = ({ clientName, 
           </div>
         </div>
       </div>
+
+      {/* Parameter Breakdown Details Table */}
+      {kpis.parameterBreakdown && kpis.parameterBreakdown.length > 0 && (
+        <div id="parameter-breakdown-details" className="mb-6 bg-[#091122]/70 border border-ui-border/80 rounded-xl overflow-hidden shadow-inner">
+          <div className="px-4 py-3 bg-[#0a1424] border-b border-ui-border/80 flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200 flex items-center gap-1.5">
+              <span className="h-1.5 w-1.5 rounded-full bg-ui-accent" />
+              Desviación por {isMycotoxins ? 'Micotoxina' : 'Nutriente / Parámetro'}
+            </h4>
+            <span className="text-[10px] text-slate-400 font-mono">Valores de media ponderada</span>
+          </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-ui-border/50 text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-[#060c18]">
+                  <th className="px-4 py-3">Parámetro</th>
+                  <th className="px-4 py-3 text-right">Promedio Cliente</th>
+                  <th className="px-4 py-3 text-right">Promedio Global</th>
+                  <th className="px-4 py-3 text-right">Desviación respecto al Global</th>
+                  <th className="px-4 py-3 text-center">Inocuidad / Estatus</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-ui-border/40 text-xs text-slate-300">
+                {kpis.parameterBreakdown.map((param) => {
+                  const isPositiveDev = isMycotoxins ? param.diffPct < 0 : param.diffPct > 0;
+                  
+                  return (
+                    <tr key={param.key} className="hover:bg-ui-accent/5 transition-colors duration-150">
+                      <td className="px-4 py-3 font-semibold text-slate-200">
+                        {param.label}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono font-medium text-slate-100">
+                        {formatVal(param.clientMean)}
+                      </td>
+                      <td className="px-4 py-3 text-right font-mono text-slate-400">
+                        {formatVal(param.globalMean)}
+                      </td>
+                      <td className={`px-4 py-3 text-right font-mono font-black ${
+                        isPositiveDev ? 'text-emerald-400' : 'text-rose-400'
+                      }`}>
+                        {param.diffPct > 0 ? '+' : ''}{param.diffPct.toFixed(2)}%
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border ${
+                          isPositiveDev 
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' 
+                            : 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                        }`}>
+                          {isPositiveDev ? (isMycotoxins ? 'Menor Riesgo' : 'Óptimo') : (isMycotoxins ? 'Mayor Riesgo' : 'Por debajo')}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 p-3.5 bg-ui-darkest/45 border border-ui-border/60 rounded-xl flex items-start space-x-3">
         <div className="p-1.5 bg-ui-accent/10 border border-ui-accent/20 rounded-lg text-ui-accent mt-0.5 shrink-0">

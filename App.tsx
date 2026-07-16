@@ -300,6 +300,13 @@ const App: React.FC = () => {
         let totalClientValuesCount = 0;
         let totalGlobalOutliers = 0;
         let totalGlobalValuesCount = 0;
+        const parameterBreakdown: Array<{
+            key: string;
+            label: string;
+            clientMean: number;
+            globalMean: number;
+            diffPct: number;
+        }> = [];
 
         availableNutrients.forEach(nutrient => {
             const clientValues = multiTrendData
@@ -317,6 +324,14 @@ const App: React.FC = () => {
                 const diffPct = globalMean !== 0 ? ((clientMean - globalMean) / globalMean) * 100 : 0;
                 totalClientAvgDiffPct += diffPct;
                 nutrientCount++;
+
+                parameterBreakdown.push({
+                    key: nutrient.key,
+                    label: nutrient.label,
+                    clientMean,
+                    globalMean,
+                    diffPct
+                });
 
                 const isMycotoxin = selectedCategory === 'mycotoxins';
                 if (isMycotoxin) {
@@ -353,7 +368,8 @@ const App: React.FC = () => {
             globalRejectionRate,
             rejectionDiff: clientRejectionRate - globalRejectionRate,
             clientSamples: totalClientValuesCount,
-            globalSamples: totalGlobalValuesCount
+            globalSamples: totalGlobalValuesCount,
+            parameterBreakdown
         };
     }, [multiTrendData, globalComparisonData, selectedCliente, availableNutrients, selectedCategory, selectedSpecies]);
     
