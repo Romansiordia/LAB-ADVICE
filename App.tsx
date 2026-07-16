@@ -806,6 +806,7 @@ const App: React.FC = () => {
                                             material={selectedMaterial} 
                                             data={multiTrendData} 
                                             category={selectedCategory} 
+                                            user={user}
                                         />
                                     )}
                                 </div>

@@ -11,6 +11,7 @@ interface AiChatbotProps {
   data: RawMaterialData[];
   category: 'nutrients' | 'mycotoxins';
   isGeneratingPdf?: boolean;
+  user?: { nombre: string; usuario: string } | null;
 }
 
 interface Message {
@@ -20,13 +21,41 @@ interface Message {
   timestamp: Date;
 }
 
-export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, isGeneratingPdf }) => {
+export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, isGeneratingPdf, user }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const currentUser = user || (() => {
+    try {
+      const saved = localStorage.getItem('authenticated_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  })();
+
+  const userKey = currentUser ? currentUser.usuario : 'anonymous';
+
+  const [queriesUsed, setQueriesUsed] = useState<number>(() => {
+    try {
+      const savedUser = localStorage.getItem('authenticated_user');
+      const usr = savedUser ? JSON.parse(savedUser).usuario : 'anonymous';
+      const stored = localStorage.getItem(`ai_queries_user_${usr}`);
+      return stored ? parseInt(stored, 10) : 0;
+    } catch {
+      return 0;
+    }
+  });
+
+  useEffect(() => {
+    const usr = user ? user.usuario : 'anonymous';
+    const stored = localStorage.getItem(`ai_queries_user_${usr}`);
+    setQueriesUsed(stored ? parseInt(stored, 10) : 0);
+  }, [user]);
 
   // Generate dynamic stats summary for the AI context
   const getStatsSummary = () => {
@@ -130,6 +159,11 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, 
     const promptText = textToSend || inputValue;
     if (!promptText.trim() || isLoading) return;
 
+    if (queriesUsed >= 3) {
+      setError("Has alcanzado el límite de 3 consultas permitidas de IA para tu usuario.");
+      return;
+    }
+
     const userMessage: Message = {
       id: 'msg-' + Date.now(),
       role: 'user',
@@ -185,6 +219,11 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, 
       if (resultData.error) {
         throw new Error(resultData.error);
       }
+
+      // Increment queriesUsed count and persist
+      const newCount = queriesUsed + 1;
+      setQueriesUsed(newCount);
+      localStorage.setItem(`ai_queries_user_${userKey}`, newCount.toString());
 
       const assistantMessage: Message = {
         id: 'msg-' + (Date.now() + 1),
@@ -254,10 +293,13 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, 
             <Sparkles className="w-5 h-5 text-ui-accent" />
           </div>
           <div>
-            <h3 className="font-bold text-slate-100 flex items-center text-sm uppercase tracking-wider">
+            <h3 className="font-bold text-slate-100 flex flex-wrap items-center gap-1.5 text-sm uppercase tracking-wider">
               Análisis de IA & Reporte General
-              <span className="ml-2 inline-block px-1.5 py-0.5 rounded text-[10px] bg-ui-accent/20 text-ui-accent font-semibold">
+              <span className="inline-block px-1.5 py-0.5 rounded text-[10px] bg-ui-accent/20 text-ui-accent font-semibold">
                 GEMINI
+              </span>
+              <span className={`inline-block px-1.5 py-0.5 rounded text-[10px] font-semibold border ${queriesUsed >= 3 ? 'bg-red-500/10 text-red-400 border-red-500/25' : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/25'}`}>
+                {Math.max(0, 3 - queriesUsed)} / 3 consultas libres
               </span>
             </h3>
             <p className="text-[11px] text-slate-400 mt-0.5">
@@ -357,7 +399,7 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, 
       </div>
 
       {/* Action Suggestion Chips */}
-      {messages.length > 0 && !isLoading && (
+      {messages.length > 0 && !isLoading && queriesUsed < 3 && (
         <div className="p-3 border-t border-ui-border bg-[#0c1626] flex flex-col space-y-2">
           <span className="text-[10px] uppercase tracking-wider text-slate-500 px-1 font-semibold">
             Análisis sugeridos rápidos:
@@ -378,30 +420,44 @@ export const AiChatbot: React.FC<AiChatbotProps> = ({ material, data, category, 
 
       {/* Input Form */}
       {!isGeneratingPdf && (
-        <form
-          onSubmit={e => {
-            e.preventDefault();
-            handleSendMessage();
-          }}
-          className="p-4 border-t border-ui-border bg-ui-card flex items-center space-x-3"
-        >
-          <input
-            type="text"
-            value={inputValue}
-            onChange={e => setInputValue(e.target.value)}
-            disabled={isLoading}
-            placeholder="Pregunta algo sobre los datos de calidad o pide un reporte general..."
-            className="flex-1 bg-ui-darkest border border-ui-border text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-3 outline-none focus:ring-1 focus:ring-ui-accent transition-all"
-          />
-          <button
-            type="submit"
-            disabled={!inputValue.trim() || isLoading}
-            className="bg-ui-accent hover:bg-cyan-400 text-slate-900 font-semibold p-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 flex items-center space-x-2"
+        queriesUsed < 3 ? (
+          <form
+            onSubmit={e => {
+              e.preventDefault();
+              handleSendMessage();
+            }}
+            className="p-4 border-t border-ui-border bg-ui-card flex items-center space-x-3"
           >
-            <span className="hidden sm:inline">Enviar</span>
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
+            <input
+              type="text"
+              value={inputValue}
+              onChange={e => setInputValue(e.target.value)}
+              disabled={isLoading}
+              placeholder="Pregunta algo sobre los datos de calidad o pide un reporte general..."
+              className="flex-1 bg-ui-darkest border border-ui-border text-slate-100 placeholder-slate-500 text-sm rounded-xl px-4 py-3 outline-none focus:ring-1 focus:ring-ui-accent transition-all"
+            />
+            <button
+              type="submit"
+              disabled={!inputValue.trim() || isLoading}
+              className="bg-ui-accent hover:bg-cyan-400 text-slate-900 font-semibold p-3 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed shrink-0 flex items-center space-x-2"
+            >
+              <span className="hidden sm:inline">Enviar</span>
+              <Send className="w-4 h-4" />
+            </button>
+          </form>
+        ) : (
+          <div className="p-4 border-t border-ui-border bg-[#180f15]/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-amber-400 font-medium">
+            <div className="flex items-center space-x-2.5 text-sm">
+              <span className="p-1.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-500 shrink-0">
+                <Bot className="w-4 h-4" />
+              </span>
+              <span>Has alcanzado el límite máximo de 3 consultas de IA permitidas para tu usuario ({currentUser?.nombre || 'Usuario'}).</span>
+            </div>
+            <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 border border-amber-500/35 text-amber-400 font-bold uppercase tracking-wider shrink-0">
+              Límite alcanzado
+            </span>
+          </div>
+        )
       )}
     </div>
   );
