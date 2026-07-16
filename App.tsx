@@ -33,6 +33,7 @@ import { getNutrientIcon } from './components/icons/getNutrientIcon';
 import { DownloadIcon } from './components/icons/DownloadIcon';
 import { ShieldCheckIcon } from './components/icons/ShieldCheckIcon';
 import { SupplierAnalysis } from './components/SupplierAnalysis';
+import { ClientComparison } from './components/ClientComparison';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 
@@ -276,6 +277,85 @@ const App: React.FC = () => {
     }, [availableNutrientsFull, selectedCategory, isGeneratingPdf]);
 
     const activeCategoryNutrients = availableNutrients;
+
+    const globalComparisonData = useMemo(() => {
+        return rawData.filter(d => {
+            const itemDateStr = d.date.substring(0, 10);
+            return (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && 
+                (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
+                (selectedLote === ALL_FILTER || d.lote === selectedLote) &&
+                (selectedProveedor === ALL_FILTER || d.Proveedor === selectedProveedor) &&
+                (selectedOrigen === ALL_FILTER || d.Origen === selectedOrigen) &&
+                (!startDate || itemDateStr >= startDate) &&
+                (!endDate || itemDateStr <= endDate)
+        });
+    }, [rawData, selectedMaterial, selectedSubtipo, selectedLote, selectedProveedor, selectedOrigen, startDate, endDate]);
+
+    const clientVsGlobalKpis = useMemo(() => {
+        if (selectedCliente === ALL_FILTER || rawData.length === 0) return null;
+
+        let totalClientAvgDiffPct = 0;
+        let nutrientCount = 0;
+        let totalClientOutliers = 0;
+        let totalClientValuesCount = 0;
+        let totalGlobalOutliers = 0;
+        let totalGlobalValuesCount = 0;
+
+        availableNutrients.forEach(nutrient => {
+            const clientValues = multiTrendData
+                .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                .map(d => Number(d[nutrient.key]));
+
+            const globalValues = globalComparisonData
+                .filter(d => d[nutrient.key] !== undefined && d[nutrient.key] !== null && d[nutrient.key] !== '' && Number(d[nutrient.key]) !== 0)
+                .map(d => Number(d[nutrient.key]));
+
+            if (clientValues.length > 0 && globalValues.length > 0) {
+                const clientMean = clientValues.reduce((a, b) => a + b, 0) / clientValues.length;
+                const globalMean = globalValues.reduce((a, b) => a + b, 0) / globalValues.length;
+
+                const diffPct = globalMean !== 0 ? ((clientMean - globalMean) / globalMean) * 100 : 0;
+                totalClientAvgDiffPct += diffPct;
+                nutrientCount++;
+
+                const isMycotoxin = selectedCategory === 'mycotoxins';
+                if (isMycotoxin) {
+                    const thresholds = MYCOTOXIN_THRESHOLDS[selectedSpecies]?.[nutrient.key];
+                    if (thresholds) {
+                        const limit = thresholds.part2_max;
+                        totalClientOutliers += clientValues.filter(v => v > limit).length;
+                        totalGlobalOutliers += globalValues.filter(v => v > limit).length;
+                    }
+                } else {
+                    const variance = globalValues.length > 1 ? globalValues.reduce((sum, val) => sum + Math.pow(val - globalMean, 2), 0) / (globalValues.length - 1) : 0;
+                    const stdDev = Math.sqrt(variance);
+                    const lcl = globalMean - stdDev;
+                    const ucl = globalMean + stdDev;
+
+                    totalClientOutliers += clientValues.filter(v => v < lcl || v > ucl).length;
+                    totalGlobalOutliers += globalValues.filter(v => v < lcl || v > ucl).length;
+                }
+
+                totalClientValuesCount += clientValues.length;
+                totalGlobalValuesCount += globalValues.length;
+            }
+        });
+
+        if (nutrientCount === 0) return null;
+
+        const avgDiffPct = totalClientAvgDiffPct / nutrientCount;
+        const clientRejectionRate = totalClientValuesCount > 0 ? (totalClientOutliers / totalClientValuesCount) * 100 : 0;
+        const globalRejectionRate = totalGlobalValuesCount > 0 ? (totalGlobalOutliers / totalGlobalValuesCount) * 100 : 0;
+
+        return {
+            avgDiffPct,
+            clientRejectionRate,
+            globalRejectionRate,
+            rejectionDiff: clientRejectionRate - globalRejectionRate,
+            clientSamples: totalClientValuesCount,
+            globalSamples: totalGlobalValuesCount
+        };
+    }, [multiTrendData, globalComparisonData, selectedCliente, availableNutrients, selectedCategory, selectedSpecies]);
     
     const createFilterOptions = (key: keyof RawMaterialData) => useMemo(() => {
         const values = new Set(rawData.filter(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d[key]).map(d => d[key] as string));
@@ -510,6 +590,14 @@ const App: React.FC = () => {
                         </header>
                         
                         <div className="max-w-[1600px] mx-auto p-4 bg-transparent" id="report-content">
+                            {selectedCliente !== ALL_FILTER && (
+                                <ClientComparison 
+                                    clientName={selectedCliente} 
+                                    category={selectedCategory} 
+                                    kpis={clientVsGlobalKpis} 
+                                />
+                            )}
+
                             {isGeneratingPdf && (
                                 <div className="mb-8 bg-ui-card p-6 rounded-xl shadow-sm border border-ui-border">
                                     <h1 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">
