@@ -263,8 +263,17 @@ const App: React.FC = () => {
 
     const availableMaterials = useMemo(() => {
         if (rawData.length === 0) return [];
-        return [ALL_FILTER, ...new Set(rawData.map(d => d.material))];
-    }, [rawData]);
+        const sourceData = selectedCliente === ALL_FILTER
+            ? rawData
+            : rawData.filter(d => d.Cliente === selectedCliente);
+        return [ALL_FILTER, ...Array.from(new Set(sourceData.map(d => d.material).filter(Boolean)))];
+    }, [rawData, selectedCliente]);
+
+    useEffect(() => {
+        if (selectedMaterial !== ALL_FILTER && availableMaterials.length > 0 && !availableMaterials.includes(selectedMaterial)) {
+            setSelectedMaterial(ALL_FILTER);
+        }
+    }, [availableMaterials, selectedMaterial]);
 
     const availableNutrientsFull = useMemo(() => {
         if (rawData.length === 0) return [];
@@ -374,15 +383,35 @@ const App: React.FC = () => {
     }, [multiTrendData, globalComparisonData, selectedCliente, availableNutrients, selectedCategory, selectedSpecies]);
     
     const createFilterOptions = (key: keyof RawMaterialData) => useMemo(() => {
-        const values = new Set(rawData.filter(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d[key]).map(d => d[key] as string));
+        const values = new Set(
+            rawData
+                .filter(d => 
+                    (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) &&
+                    (selectedCliente === ALL_FILTER || key === 'Cliente' || d.Cliente === selectedCliente) &&
+                    d[key]
+                )
+                .map(d => d[key] as string)
+        );
         return [ALL_FILTER, ...Array.from(values)];
-    }, [rawData, selectedMaterial]);
+    }, [rawData, selectedMaterial, selectedCliente]);
     
     const availableSubtipos = createFilterOptions('subtipo');
     const availableLotes = createFilterOptions('lote');
     const availableClientes = createFilterOptions('Cliente');
     const availableProveedores = createFilterOptions('Proveedor');
     const availableOrigenes = createFilterOptions('Origen');
+
+    useEffect(() => {
+        if (selectedSubtipo !== ALL_FILTER && availableSubtipos.length > 0 && !availableSubtipos.includes(selectedSubtipo)) {
+            setSelectedSubtipo(ALL_FILTER);
+        }
+    }, [availableSubtipos, selectedSubtipo]);
+
+    useEffect(() => {
+        if (selectedLote !== ALL_FILTER && availableLotes.length > 0 && !availableLotes.includes(selectedLote)) {
+            setSelectedLote(ALL_FILTER);
+        }
+    }, [availableLotes, selectedLote]);
     
     const handleAiAnalysis = async () => {
         if (multiTrendData.length === 0) {
