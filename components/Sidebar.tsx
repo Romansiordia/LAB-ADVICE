@@ -4,6 +4,7 @@ import { FileUpload } from './FileUpload';
 import { InfoIcon } from './icons/InfoIcon';
 import { Logo } from './Logo';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
+import { UserProfile } from '../types';
 
 interface FilterSelectProps {
     id: string;
@@ -70,7 +71,7 @@ interface SidebarProps {
 
     isCollapsed: boolean;
     onToggleCollapse: () => void;
-    user?: { nombre: string; usuario: string } | null;
+    user?: UserProfile | null;
     onLogout?: () => void;
 }
 
@@ -227,8 +228,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                 {user.nombre.charAt(0)}
                             </div>
                             <div className="min-w-0 flex-1">
-                                <p className="text-xs font-bold text-slate-200 truncate">{user.nombre}</p>
+                                <div className="flex items-center justify-between gap-1">
+                                    <p className="text-xs font-bold text-slate-200 truncate">{user.nombre}</p>
+                                </div>
                                 <p className="text-[10px] text-slate-500 truncate">{user.usuario}</p>
+                                {user.allowedClients && !user.allowedClients.includes('TODOS') && !user.allowedClients.includes('*') ? (
+                                    <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded bg-ui-accent/10 text-ui-accent border border-ui-accent/20 font-mono truncate max-w-full">
+                                        Cliente: {user.allowedClients.join(', ')}
+                                    </span>
+                                ) : (
+                                    <span className="inline-block mt-1 text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-mono">
+                                        Acceso Global
+                                    </span>
+                                )}
                             </div>
                         </div>
                         <button

@@ -15,8 +15,9 @@ export default async function handler(req: any, res: any) {
 
     // Fallback credentials for testing/out-of-the-box experience
     const fallbackUsers = [
-      { usuario: 'admin', contrasena: 'admin123', nombre: 'Administrador' },
-      { usuario: 'romansiordias@gmail.com', contrasena: 'lab123', nombre: 'Román Siordia' }
+      { usuario: 'admin', contrasena: 'admin123', nombre: 'Administrador', allowedClients: ['TODOS'] },
+      { usuario: 'romansiordias@gmail.com', contrasena: 'lab123', nombre: 'Román Siordia', allowedClients: ['TODOS'] },
+      { usuario: 'salvador@empresa.com', contrasena: 'salvador123', nombre: 'Salvador Aldrete', allowedClients: ['SALVADOR ALDRETE IBARRA'] }
     ];
 
     const sheetUrl = process.env.GOOGLE_SHEET_CSV_URL || process.env.GOOGLE_SHEETS_CSV_URL;
@@ -27,7 +28,11 @@ export default async function handler(req: any, res: any) {
       if (found) {
         return res.status(200).json({
           success: true,
-          user: { nombre: found.nombre, usuario: found.usuario },
+          user: { 
+            nombre: found.nombre, 
+            usuario: found.usuario,
+            allowedClients: found.allowedClients 
+          },
           message: 'Autenticado con credenciales de prueba (GOOGLE_SHEET_CSV_URL no configurado).'
         });
       }
@@ -52,7 +57,11 @@ export default async function handler(req: any, res: any) {
       if (found) {
         return res.status(200).json({
           success: true,
-          user: { nombre: found.nombre, usuario: found.usuario },
+          user: { 
+            nombre: found.nombre, 
+            usuario: found.usuario,
+            allowedClients: found.allowedClients 
+          },
           message: 'Autenticado con credenciales de prueba (Fallo al descargar la hoja de cálculo).'
         });
       }
@@ -99,11 +108,18 @@ export default async function handler(req: any, res: any) {
 
     const headers = parseCSVLine(lines[0]).map(normalizeKey);
 
-    // Identify indexes for username, password, and name columns
+    // Identify indexes for username, password, name, and allowed clients columns
     // Support Spanish and English headers
     const userIdx = headers.findIndex(h => h.includes('usuario') || h.includes('user') || h.includes('email'));
     const passIdx = headers.findIndex(h => h.includes('contrasena') || h.includes('password') || h.includes('pass'));
     const nameIdx = headers.findIndex(h => h.includes('nombre') || h.includes('name'));
+    const clientsIdx = headers.findIndex(h => 
+      h.includes('cliente') || 
+      h.includes('client') || 
+      h.includes('empresa') || 
+      h.includes('allowed') || 
+      h.includes('acceso')
+    );
 
     if (userIdx === -1 || passIdx === -1) {
       return res.status(500).json({
@@ -112,7 +128,19 @@ export default async function handler(req: any, res: any) {
       });
     }
 
-    let authenticatedUser = null;
+    // Helper to parse allowed clients string
+    const parseAllowedClients = (raw: string): string[] => {
+      if (!raw || !raw.trim()) return ['TODOS'];
+      const trimmed = raw.trim();
+      const lower = trimmed.toLowerCase();
+      if (['todos', 'all', '*', 'admin', 'completo'].includes(lower)) {
+        return ['TODOS'];
+      }
+      const parts = trimmed.split(/[,;|]+/).map(p => p.trim()).filter(Boolean);
+      return parts.length > 0 ? parts : ['TODOS'];
+    };
+
+    let authenticatedUser: { nombre: string; usuario: string; allowedClients: string[] } | null = null;
 
     // Iterate over rows to find a matching user
     for (let i = 1; i < lines.length; i++) {
@@ -123,11 +151,13 @@ export default async function handler(req: any, res: any) {
       const rowUser = (cols[userIdx] || '').toLowerCase().trim();
       const rowPass = (cols[passIdx] || '').trim();
       const rowName = nameIdx !== -1 ? (cols[nameIdx] || '').trim() : '';
+      const rawClients = clientsIdx !== -1 ? (cols[clientsIdx] || '').trim() : '';
 
       if (rowUser === cleanUsername && rowPass === cleanPassword) {
         authenticatedUser = {
           usuario: rowUser,
-          nombre: rowName || rowUser
+          nombre: rowName || rowUser,
+          allowedClients: parseAllowedClients(rawClients)
         };
         break;
       }
@@ -144,7 +174,11 @@ export default async function handler(req: any, res: any) {
       if (found) {
         return res.status(200).json({
           success: true,
-          user: { nombre: found.nombre, usuario: found.usuario },
+          user: { 
+            nombre: found.nombre, 
+            usuario: found.usuario,
+            allowedClients: found.allowedClients 
+          },
           message: 'Autenticado con credenciales de prueba.'
         });
       }

@@ -1,3 +1,9 @@
+export interface UserProfile {
+  nombre: string;
+  usuario: string;
+  allowedClients?: string[];
+}
+
 export interface RawMaterialData {
   noId?: string;
   date: string;

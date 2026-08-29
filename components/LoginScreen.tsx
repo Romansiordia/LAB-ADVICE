@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { KeyRound, Mail, User, ShieldAlert, ArrowRight, BookOpen, ChevronDown, ChevronUp, CheckCircle, Database } from 'lucide-react';
+import { UserProfile } from '../types';
 
 interface LoginScreenProps {
-  onLoginSuccess: (user: { nombre: string; usuario: string }) => void;
+  onLoginSuccess: (user: UserProfile) => void;
 }
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
@@ -195,13 +196,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                 </p>
                 <ol className="list-decimal pl-4 space-y-1.5 text-slate-400">
                   <li>
-                    Crea una hoja en Google Sheets con las siguientes tres columnas en la primera fila:
-                    <div className="bg-ui-darkest text-ui-accent font-mono py-1 px-2 rounded mt-1 select-all border border-ui-border text-center">
-                      usuario, contraseña, nombre
+                    Crea una hoja en Google Sheets con las siguientes columnas en la primera fila:
+                    <div className="bg-ui-darkest text-ui-accent font-mono py-1 px-2 rounded mt-1 select-all border border-ui-border text-center text-[11px]">
+                      usuario, contraseña, nombre, clientes_permitidos
                     </div>
+                    <span className="text-[10px] text-slate-400 block mt-1">
+                      *(Nota: La columna <code className="text-slate-200">clientes_permitidos</code> es opcional. Usa <code className="text-ui-accent">TODOS</code> para administradores o especifica el nombre del cliente ej. <code className="text-slate-200">SALVADOR ALDRETE IBARRA</code>).*
+                    </span>
                   </li>
                   <li>
-                    Agrega las filas con las credenciales de tus usuarios.
+                    Agrega las filas con las credenciales y permisos de tus usuarios.
                   </li>
                   <li>
                     Haz clic en <span className="text-slate-300 font-semibold">Archivo &gt; Compartir &gt; Publicar en la Web</span>.
@@ -220,8 +224,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLoginSuccess }) => {
                   <span className="font-bold text-ui-accent block mb-1">Acceso de pruebas out-of-the-box:</span>
                   Mientras configuras tu hoja, puedes ingresar con:
                   <ul className="list-disc pl-4 mt-1 space-y-0.5 text-slate-400">
-                    <li>Usuario: <code className="text-slate-200">romansiordias@gmail.com</code> / Clave: <code className="text-slate-200">lab123</code></li>
-                    <li>Usuario: <code className="text-slate-200">admin</code> / Clave: <code className="text-slate-200">admin123</code></li>
+                    <li><strong className="text-slate-200">Administrador global:</strong> <code className="text-slate-200">admin</code> / Clave: <code className="text-slate-200">admin123</code> (Acceso a todos)</li>
+                    <li><strong className="text-slate-200">Usuario de Román:</strong> <code className="text-slate-200">romansiordias@gmail.com</code> / Clave: <code className="text-slate-200">lab123</code> (Acceso a todos)</li>
+                    <li><strong className="text-slate-200">Usuario con Cliente Asignado:</strong> <code className="text-slate-200">salvador@empresa.com</code> / Clave: <code className="text-slate-200">salvador123</code> (Solo ve a Salvador Aldrete)</li>
                   </ul>
                 </div>
               </div>

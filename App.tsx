@@ -1,6 +1,5 @@
 
 import React, { useState, useMemo, useEffect, startTransition } from 'react';
-import { GoogleGenAI } from "@google/genai";
 import { Sidebar } from './components/Sidebar';
 import { LoginScreen } from './components/LoginScreen';
 import { MultiTrendChart } from './components/MultiTrendChart';
@@ -9,12 +8,10 @@ import { HistogramChart } from './components/HistogramChart';
 import { TrendingUpIcon } from './components/icons/TrendingUpIcon';
 import { ChartBarIcon } from './components/icons/ChartBarIcon';
 import { DataFormatModal } from './components/DataFormatModal';
-import { RawMaterialData } from './types';
+import { RawMaterialData, UserProfile } from './types';
 import { NUTRIENTS, MYCOTOXIN_THRESHOLDS, SPECIES_LABELS } from './constants';
 import { MycotoxinGauge } from './components/MycotoxinGauge';
 import { SAMPLE_DATA } from './sample-data';
-import { AiAnalysisModal } from './components/AiAnalysisModal';
-import { AiChatbot } from './components/AiChatbot';
 import { SparklesIcon } from './components/icons/SparklesIcon';
 import { MonthlyTrendChart } from './components/MonthlyTrendChart';
 import { CalendarIcon } from './components/icons/CalendarIcon';
@@ -84,7 +81,7 @@ const parseDateDDMMYYYY = (dateInput: any): Date | null => {
 };
 
 const App: React.FC = () => {
-    const [user, setUser] = useState<{ nombre: string; usuario: string } | null>(() => {
+    const [user, setUser] = useState<UserProfile | null>(() => {
         try {
             const saved = localStorage.getItem('authenticated_user');
             return saved ? JSON.parse(saved) : null;
@@ -93,12 +90,26 @@ const App: React.FC = () => {
         }
     });
 
+    const isRestrictedUser = useMemo(() => {
+        return Boolean(
+            user?.allowedClients && 
+            user.allowedClients.length > 0 && 
+            !user.allowedClients.includes('TODOS') && 
+            !user.allowedClients.includes('*') &&
+            !user.allowedClients.includes('ALL')
+        );
+    }, [user]);
+
+    const allowedClientsList = useMemo(() => {
+        return isRestrictedUser ? (user?.allowedClients || []) : [];
+    }, [isRestrictedUser, user]);
+
     const handleLogout = () => {
         localStorage.removeItem('authenticated_user');
         setUser(null);
     };
 
-    const handleLoginSuccess = (userData: { nombre: string; usuario: string }) => {
+    const handleLoginSuccess = (userData: UserProfile) => {
         localStorage.setItem('authenticated_user', JSON.stringify(userData));
         setUser(userData);
     };
@@ -109,11 +120,6 @@ const App: React.FC = () => {
     const [isSampleData, setIsSampleData] = useState<boolean>(true);
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     
-    const [isAiModalOpen, setIsAiModalOpen] = useState<boolean>(false);
-    const [isAiLoading, setIsAiLoading] = useState<boolean>(false);
-    const [aiAnalysisResult, setAiAnalysisResult] = useState<string | null>(null);
-    const [aiError, setAiError] = useState<string | null>(null);
-
     const [zoomConfig, setZoomConfig] = useState<ZoomConfig | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
@@ -247,8 +253,21 @@ const App: React.FC = () => {
         else reader.readAsBinaryString(file);
     };
 
+    const accessibleRawData = useMemo(() => {
+        if (!isRestrictedUser) return rawData;
+        return rawData.filter(d => d.Cliente && allowedClientsList.includes(d.Cliente));
+    }, [rawData, isRestrictedUser, allowedClientsList]);
+
+    useEffect(() => {
+        if (isRestrictedUser && allowedClientsList.length > 0) {
+            if (selectedCliente === ALL_FILTER || !allowedClientsList.includes(selectedCliente)) {
+                setSelectedCliente(allowedClientsList[0]);
+            }
+        }
+    }, [isRestrictedUser, allowedClientsList, selectedCliente]);
+
     const multiTrendData = useMemo(() => {
-        return rawData.filter(d => {
+        return accessibleRawData.filter(d => {
             const itemDateStr = d.date.substring(0, 10);
             return (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && 
                 (selectedSubtipo === ALL_FILTER || d.subtipo === selectedSubtipo) &&
@@ -259,15 +278,15 @@ const App: React.FC = () => {
                 (!startDate || itemDateStr >= startDate) &&
                 (!endDate || itemDateStr <= endDate)
         });
-    }, [rawData, selectedMaterial, selectedSubtipo, selectedLote, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
+    }, [accessibleRawData, selectedMaterial, selectedSubtipo, selectedLote, selectedCliente, selectedProveedor, selectedOrigen, startDate, endDate]);
 
     const availableMaterials = useMemo(() => {
-        if (rawData.length === 0) return [];
+        if (accessibleRawData.length === 0) return [];
         const sourceData = selectedCliente === ALL_FILTER
-            ? rawData
-            : rawData.filter(d => d.Cliente === selectedCliente);
+            ? accessibleRawData
+            : accessibleRawData.filter(d => d.Cliente === selectedCliente);
         return [ALL_FILTER, ...Array.from(new Set(sourceData.map(d => d.material).filter(Boolean)))];
-    }, [rawData, selectedCliente]);
+    }, [accessibleRawData, selectedCliente]);
 
     useEffect(() => {
         if (selectedMaterial !== ALL_FILTER && availableMaterials.length > 0 && !availableMaterials.includes(selectedMaterial)) {
@@ -276,9 +295,9 @@ const App: React.FC = () => {
     }, [availableMaterials, selectedMaterial]);
 
     const availableNutrientsFull = useMemo(() => {
-        if (rawData.length === 0) return [];
-        return NUTRIENTS.filter(n => rawData.some(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d[n.key] !== undefined));
-    }, [rawData, selectedMaterial]);
+        if (accessibleRawData.length === 0) return [];
+        return NUTRIENTS.filter(n => accessibleRawData.some(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d[n.key] !== undefined));
+    }, [accessibleRawData, selectedMaterial]);
 
     const availableNutrients = useMemo(() => {
         if (isGeneratingPdf) return availableNutrientsFull;
@@ -384,7 +403,7 @@ const App: React.FC = () => {
     
     const createFilterOptions = (key: keyof RawMaterialData) => useMemo(() => {
         const values = new Set(
-            rawData
+            accessibleRawData
                 .filter(d => 
                     (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) &&
                     (selectedCliente === ALL_FILTER || key === 'Cliente' || d.Cliente === selectedCliente) &&
@@ -393,11 +412,26 @@ const App: React.FC = () => {
                 .map(d => d[key] as string)
         );
         return [ALL_FILTER, ...Array.from(values)];
-    }, [rawData, selectedMaterial, selectedCliente]);
+    }, [accessibleRawData, selectedMaterial, selectedCliente]);
     
     const availableSubtipos = createFilterOptions('subtipo');
     const availableLotes = createFilterOptions('lote');
-    const availableClientes = createFilterOptions('Cliente');
+    
+    const availableClientes = useMemo(() => {
+        if (isRestrictedUser) {
+            if (allowedClientsList.length === 1) {
+                return allowedClientsList;
+            }
+            return [ALL_FILTER, ...allowedClientsList];
+        }
+        const values = new Set(
+            rawData
+                .filter(d => (selectedMaterial === ALL_FILTER || d.material === selectedMaterial) && d.Cliente)
+                .map(d => d.Cliente as string)
+        );
+        return [ALL_FILTER, ...Array.from(values)];
+    }, [rawData, selectedMaterial, isRestrictedUser, allowedClientsList]);
+
     const availableProveedores = createFilterOptions('Proveedor');
     const availableOrigenes = createFilterOptions('Origen');
 
@@ -413,26 +447,6 @@ const App: React.FC = () => {
         }
     }, [availableLotes, selectedLote]);
     
-    const handleAiAnalysis = async () => {
-        if (multiTrendData.length === 0) {
-            setAiError("No hay suficientes datos.");
-            setIsAiModalOpen(true);
-            return;
-        }
-        setIsAiModalOpen(true);
-        setIsAiLoading(true);
-        const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-        const prompt = `Actúa como un experto nutricionista animal. Analiza la calidad de ${selectedMaterial} con estos datos...`;
-        try {
-            const response = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt });
-            setAiAnalysisResult(response.text);
-        } catch (e: any) {
-            setAiError(`Error: ${e.message}`);
-        } finally {
-            setIsAiLoading(false);
-        }
-    };
-
     const activeZoomedData = useMemo(() => {
         if (!zoomConfig) return null;
         const config = NUTRIENTS.find(n => n.key === zoomConfig.key);
@@ -603,21 +617,6 @@ const App: React.FC = () => {
                                             <option key={mat} value={mat}>{mat}</option>
                                         ))}
                                     </select>
-                                    <button
-                                        onClick={() => {
-                                            startTransition(() => {
-                                                setCurrentView('statistics');
-                                            });
-                                            setTimeout(() => {
-                                                document.getElementById('ai-report-section')?.scrollIntoView({ behavior: 'smooth' });
-                                            }, 100);
-                                        }}
-                                        className="flex items-center justify-center bg-ui-darkest border border-ui-accent/50 text-ui-accent py-2.5 px-4 rounded-lg hover:bg-ui-accent/10 transition-all shrink-0 font-semibold"
-                                        title="Ver Asistente IA"
-                                    >
-                                        <SparklesIcon />
-                                        <span className="ml-2 hidden sm:inline">Reporte IA</span>
-                                    </button>
                                     <button
                                         onClick={handleGeneratePdf}
                                         className="flex items-center justify-center bg-ui-darkest border border-ui-border text-slate-300 py-2.5 px-4 rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all shrink-0"
@@ -932,16 +931,6 @@ const App: React.FC = () => {
                                             <NutrientStatsTable data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
                                         </div>
                                     </div>
-
-                                    {/* AI Chatbot - Excluido del PDF para ahorrar espacio y mejorar formato */}
-                                    {rawData.length > 0 && !isGeneratingPdf && (
-                                        <AiChatbot 
-                                            material={selectedMaterial} 
-                                            data={multiTrendData} 
-                                            category={selectedCategory} 
-                                            user={user}
-                                        />
-                                    )}
                                 </div>
                             )}
 
