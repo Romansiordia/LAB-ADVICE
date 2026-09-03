@@ -12,7 +12,6 @@ import { RawMaterialData, UserProfile } from './types';
 import { NUTRIENTS, MYCOTOXIN_THRESHOLDS, SPECIES_LABELS } from './constants';
 import { MycotoxinGauge } from './components/MycotoxinGauge';
 import { SAMPLE_DATA } from './sample-data';
-import { SparklesIcon } from './components/icons/SparklesIcon';
 import { MonthlyTrendChart } from './components/MonthlyTrendChart';
 import { CalendarIcon } from './components/icons/CalendarIcon';
 import { Logo } from './components/Logo';
@@ -535,7 +534,7 @@ const App: React.FC = () => {
                     </button>
                 )}
 
-                {isLoading && !isAiLoading ? (
+                {isLoading ? (
                      <div className="flex items-center justify-center h-full">
                         <div className="animate-spin h-10 w-10 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
                     </div>
