@@ -40,6 +40,7 @@ interface SidebarProps {
     materials: string[];
     isLoading: boolean;
     error: string | null;
+    infoMessage?: string | null;
     hasData: boolean;
     isSampleData: boolean;
     onShowFormatHelp: () => void;
@@ -82,6 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     materials,
     isLoading,
     error,
+    infoMessage,
     hasData,
     isSampleData,
     onShowFormatHelp,
@@ -134,6 +136,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 
                 <div className="flex flex-col flex-1 overflow-hidden">
                     {error && <div className="text-red-700 bg-red-100 p-3 rounded-md text-sm mb-4 flex-shrink-0">{error}</div>}
+                    {infoMessage && (
+                        <div className="text-cyan-200 bg-cyan-950/60 border border-cyan-500/40 p-3 rounded-md text-xs mb-4 flex-shrink-0 flex items-start space-x-2">
+                            <span className="text-sm">ℹ️</span>
+                            <span>{infoMessage}</span>
+                        </div>
+                    )}
 
                     {hasData && (
                         <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pt-2 custom-scrollbar flex-1 pb-4">

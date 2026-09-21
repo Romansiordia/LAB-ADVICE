@@ -32,6 +32,14 @@ import { SupplierAnalysis } from './components/SupplierAnalysis';
 import { ClientComparison } from './components/ClientComparison';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { parseFlexibleDate, detectDateFormat } from './dateParser';
+import { 
+    decodeFileBuffer, 
+    normalizeHeaderKey, 
+    COLUMN_ALIASES, 
+    normalizeMaterialName, 
+    fixPotentialColumnShift 
+} from './csvCleaner';
 
 declare const Papa: any;
 declare const XLSX: any;
@@ -44,40 +52,6 @@ interface ZoomConfig {
     type: ZoomType;
     key: string;
 }
-
-const excelSerialDateToJSDate = (serial: number): Date => {
-    const utc_days = Math.floor(serial - 25569);
-    const utc_value = utc_days * 86400; 
-    const date_info = new Date(utc_value * 1000);
-    return new Date(date_info.getUTCFullYear(), date_info.getUTCMonth(), date_info.getUTCDate());
-};
-
-const parseDateDDMMYYYY = (dateInput: any): Date | null => {
-    if (dateInput === null || dateInput === undefined) return null;
-    if (typeof dateInput === 'number' && dateInput > 1) {
-        return excelSerialDateToJSDate(dateInput);
-    }
-    const dateStr = String(dateInput).trim();
-    if (dateStr === '') return null;
-    const parts = dateStr.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-    if (parts) {
-        const day = parseInt(parts[1], 10);
-        const month = parseInt(parts[2], 10) - 1; 
-        const year = parseInt(parts[3], 10);
-        if (year >= 1000 && year <= 3000 && month >= 0 && month <= 11 && day >= 1 && day <= 31) {
-            const date = new Date(Date.UTC(year, month, day));
-            if (date.getUTCFullYear() === year && date.getUTCMonth() === month && date.getUTCDate() === day) {
-                return date;
-            }
-        }
-    }
-    // Fallback to standard JS parsing (handles YYYY-MM-DD, MM/DD/YYYY, etc.)
-    const fallbackDate = new Date(dateStr);
-    if (!isNaN(fallbackDate.getTime())) {
-        return fallbackDate;
-    }
-    return null;
-};
 
 const App: React.FC = () => {
     const [user, setUser] = useState<UserProfile | null>(() => {
@@ -179,51 +153,108 @@ const App: React.FC = () => {
     const [selectedOrigen, setSelectedOrigen] = useState<string>(ALL_FILTER);
     const [startDate, setStartDate] = useState<string | null>(null);
     const [endDate, setEndDate] = useState<string | null>(null);
+    const [infoNotice, setInfoNotice] = useState<string | null>(null);
     
     const handleFileParse = (file: File) => {
         setIsLoading(true);
         setError(null);
+        setInfoNotice(null);
         setRawData([]);
         setIsSampleData(false);
         const reader = new FileReader();
         const fileExtension = file.name.split('.').pop()?.toLowerCase();
+
         reader.onload = (event) => {
             try {
-                const data = event.target?.result;
+                const arrayBuffer = event.target?.result as ArrayBuffer;
                 let parsedData: any[] = [];
+
                 if (fileExtension === 'csv') {
-                    parsedData = Papa.parse(data, { header: true, skipEmptyLines: true }).data;
+                    // Decodificación inteligente para evitar caracteres corruptos como "Maz"
+                    const text = decodeFileBuffer(arrayBuffer);
+                    parsedData = Papa.parse(text, { 
+                        header: true, 
+                        skipEmptyLines: 'greedy',
+                        delimitersToGuess: [',', ';', '\t', '|']
+                    }).data;
                 } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                    const workbook = XLSX.read(data, { type: 'binary' });
+                    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
                     const sheetName = workbook.SheetNames[0];
-                    parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: true });
+                    parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: true, defval: '' });
                 } else {
-                    throw new Error('Formato de archivo no soportado.');
+                    throw new Error('Formato de archivo no soportado. Por favor utiliza un archivo .csv o .xlsx/.xls');
                 }
+
+                // Normalización de cabeceras de columnas (eliminación de tildes, símbolos, espacios)
                 const normalizedData = parsedData.map(row => {
                     const newRow: {[key: string]: any} = {};
                     for (const key in row) { 
-                        const cleanKey = key.trim().replace(/^\uFEFF/, '').toLowerCase();
-                        newRow[cleanKey] = row[key]; 
+                        const cleanKey = normalizeHeaderKey(key);
+                        if (cleanKey) {
+                            newRow[cleanKey] = row[key];
+                        }
                     }
                     return newRow;
                 });
+
+                // Muestreo para detectar automáticamente si el formato ambiguo (ej. 8/1 vs 8/4) es Mes/Día o Día/Mes
+                const rawDateStrings = normalizedData.map(row => {
+                    for (const alias of COLUMN_ALIASES.date) {
+                        if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
+                            return row[alias];
+                        }
+                    }
+                    return row.date || row.fecha;
+                });
+                const inferredDateFormat = detectDateFormat(rawDateStrings);
+
+                let shiftedRowsCount = 0;
+
                 const formattedData: RawMaterialData[] = normalizedData
                     .map((row: any) => {
-                        const dateObj = parseDateDDMMYYYY(row.date || row.fecha);
+                        // Búsqueda de campo fecha entre alias posibles
+                        let rawDate = null;
+                        for (const alias of COLUMN_ALIASES.date) {
+                            if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
+                                rawDate = row[alias];
+                                break;
+                            }
+                        }
+                        const dateObj = parseFlexibleDate(rawDate, inferredDateFormat);
                         if (!dateObj) return null;
-                        const newRow: RawMaterialData = {
-                            noId: row['no id'] || row['noid'] || row['no_id'] || row['no. id'] || row['no.id'] || row['id'] || row['no_ id'] || row['id muestra'] || row['id_muestra'],
-                            date: dateObj.toISOString(),
-                            material: row.material || 'Desconocido',
-                            subtipo: row.subtipo,
-                            lote: row.lote || row.batch,
-                            Cliente: row.cliente,
-                            Proveedor: row.proveedor,
-                            Origen: row.origen,
+
+                        const findField = (aliases: string[]) => {
+                            for (const a of aliases) {
+                                if (row[a] !== undefined && row[a] !== null && String(row[a]).trim() !== '') {
+                                    return String(row[a]).trim();
+                                }
+                            }
+                            return undefined;
                         };
+
+                        const rawMaterial = findField(COLUMN_ALIASES.material) || 'Desconocido';
+                        const cleanMaterial = normalizeMaterialName(rawMaterial);
+
+                        const newRow: RawMaterialData = {
+                            noId: findField(COLUMN_ALIASES.noId),
+                            date: dateObj.toISOString(),
+                            material: cleanMaterial,
+                            subtipo: findField(COLUMN_ALIASES.subtipo),
+                            lote: findField(COLUMN_ALIASES.lote),
+                            Cliente: findField(COLUMN_ALIASES.Cliente),
+                            Proveedor: findField(COLUMN_ALIASES.Proveedor),
+                            Origen: findField(COLUMN_ALIASES.Origen),
+                        };
+
                         NUTRIENTS.forEach(nutrient => {
-                            const rawValue = row[nutrient.key];
+                            const aliases = COLUMN_ALIASES[nutrient.key] || [nutrient.key];
+                            let rawValue: any = undefined;
+                            for (const alias of aliases) {
+                                if (row[alias] !== undefined && row[alias] !== null && row[alias] !== '') {
+                                    rawValue = row[alias];
+                                    break;
+                                }
+                            }
                             if (rawValue !== undefined && rawValue !== null) {
                                 const strVal = String(rawValue).trim();
                                 if (strVal !== '' && !strVal.includes('<') && !strVal.includes('>') && !strVal.includes('...') && !strVal.includes('…')) {
@@ -235,11 +266,25 @@ const App: React.FC = () => {
                                 }
                             }
                         });
+
+                        // Detección y autocorrección de desfasamiento de columnas si las comas saltaron una columna
+                        if (fixPotentialColumnShift(newRow)) {
+                            shiftedRowsCount++;
+                        }
+
                         return newRow;
                     })
                     .filter((row): row is RawMaterialData => row !== null && !!row.date && !!row.material)
                     .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-                if(formattedData.length === 0) throw new Error('No se encontraron datos válidos. Revisa el formato de fecha (DD/MM/AAAA) y las columnas requeridas (date, material).');
+
+                if (formattedData.length === 0) {
+                    throw new Error('No se encontraron registros válidos. Verifica que las columnas obligatorias (fecha y material) estén presentes.');
+                }
+
+                if (shiftedRowsCount > 0) {
+                    setInfoNotice(`Aviso: Se detectó y corrigió automáticamente un desfasamiento de columnas en ${shiftedRowsCount} registro(s) (la proteína venía corrida hacia humedad por comas vacías en el archivo CSV).`);
+                }
+
                 setRawData(formattedData);
                 setSelectedMaterial(ALL_FILTER);
             } catch (e: any) {
@@ -248,8 +293,9 @@ const App: React.FC = () => {
                 setIsLoading(false);
             }
         };
-        if (fileExtension === 'csv') reader.readAsText(file);
-        else reader.readAsBinaryString(file);
+
+        // Leer siempre como ArrayBuffer para admitir decodificación limpia tanto UTF-8 como ANSI/Excel
+        reader.readAsArrayBuffer(file);
     };
 
     const accessibleRawData = useMemo(() => {
@@ -477,6 +523,7 @@ const App: React.FC = () => {
                 materials={availableMaterials}
                 isLoading={isLoading}
                 error={error}
+                infoMessage={infoNotice}
                 hasData={rawData.length > 0}
                 isSampleData={isSampleData}
                 onShowFormatHelp={() => setIsModalOpen(true)}
