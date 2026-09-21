@@ -178,11 +178,11 @@ const App: React.FC = () => {
                         delimitersToGuess: [',', ';', '\t', '|']
                     }).data;
                 } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                    const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+                    const workbook = XLSX.read(arrayBuffer, { type: 'array', cellDates: true });
                     const sheetName = workbook.SheetNames[0];
                     parsedData = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: true, defval: '' });
                 } else {
-                    throw new Error('Formato de archivo no soportado. Por favor utiliza un archivo .csv o .xlsx/.xls');
+                    throw new Error('Formato de archivo no soportado. Por favor utiliza un archivo Excel (.xlsx, .xls) o CSV (.csv)');
                 }
 
                 // Normalización de cabeceras de columnas (eliminación de tildes, símbolos, espacios)
@@ -281,7 +281,9 @@ const App: React.FC = () => {
                     throw new Error('No se encontraron registros válidos. Verifica que las columnas obligatorias (fecha y material) estén presentes.');
                 }
 
-                if (shiftedRowsCount > 0) {
+                if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+                    setInfoNotice(`Archivo Excel procesado exitosamente (${formattedData.length} registros). Columnas sincronizadas con posición fija de celda.`);
+                } else if (shiftedRowsCount > 0) {
                     setInfoNotice(`Aviso: Se detectó y corrigió automáticamente un desfasamiento de columnas en ${shiftedRowsCount} registro(s) (la proteína venía corrida hacia humedad por comas vacías en el archivo CSV).`);
                 }
 
@@ -638,7 +640,7 @@ const App: React.FC = () => {
                                             ) : (
                                                 <>
                                                     <UploadIcon className="w-4 h-4 mr-2" />
-                                                    <span>Subir Datos</span>
+                                                    <span>Subir Excel / CSV</span>
                                                 </>
                                             )}
                                             <input 
@@ -649,7 +651,7 @@ const App: React.FC = () => {
                                                         handleFileParse(e.target.files[0]);
                                                     }
                                                 }} 
-                                                accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" 
+                                                accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, text/csv" 
                                                 disabled={isLoading}
                                             />
                                         </label>

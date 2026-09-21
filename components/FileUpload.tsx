@@ -65,12 +65,12 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileParse, isLoading }
                             <UploadIcon className="w-5 h-5" />
                         </div>
                         <div className="flex flex-col">
-                            <span className="text-sm font-semibold text-slate-300">Subir nuevos datos</span>
-                            <span className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">CSV o Excel</span>
+                            <span className="text-sm font-semibold text-slate-200">Subir archivo</span>
+                            <span className="text-[11px] font-semibold text-emerald-400 tracking-wider">Excel (.xlsx, .xls) o CSV</span>
                         </div>
                     </div>
                 )}
-                <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel" />
+                <input id="file-upload" type="file" className="hidden" onChange={handleFileChange} accept=".xlsx, .xls, .csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel, text/csv" />
             </label>
         </div>
     );

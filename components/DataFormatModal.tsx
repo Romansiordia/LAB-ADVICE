@@ -36,6 +36,16 @@ export const DataFormatModal: React.FC<DataFormatModalProps> = ({ isOpen, onClos
                     Para asegurar una correcta visualización, tu archivo (CSV o Excel) debe contener las siguientes columnas en la primera fila (cabeceras). El orden no es estricto, pero los nombres deben coincidir.
                 </p>
 
+                <div className="mb-5 p-4 bg-emerald-950/40 border border-emerald-500/40 rounded-lg flex items-start space-x-3">
+                    <span className="text-2xl">📊</span>
+                    <div>
+                        <h3 className="font-bold text-emerald-300 text-sm mb-1">Recomendado: Cargar directamente en Excel (.xlsx o .xls)</h3>
+                        <p className="text-xs text-emerald-200/90 leading-relaxed">
+                            Al subir tu archivo de Excel original, las columnas permanecen <strong>fijas por posición de celda</strong> (Columna I = Proteína, Columna J = Humedad, etc.). No tienes que preocuparte por comas vacías, delimitadores ni separadores como en los archivos CSV.
+                        </p>
+                    </div>
+                </div>
+
                 <div className="mb-6 p-4 bg-ui-darkest rounded-md">
                     <h3 className="font-semibold text-ui-accent mb-2">Notas Importantes:</h3>
                     <ul className="list-disc list-inside text-sm space-y-1">
