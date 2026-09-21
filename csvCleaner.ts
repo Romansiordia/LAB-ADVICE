@@ -43,7 +43,10 @@ export const normalizeHeaderKey = (key: string): string => {
 };
 
 /**
- * Mapeo de alias comunes de cabeceras en español e inglés
+ * Mapeo de alias comunes de cabeceras en español e inglés.
+ * Se evitan intencionalmente abreviaturas ambiguas de 1 o 2 letras (como P, CA, CP, PB, EE, FC, FB, CZ)
+ * para evitar que columnas de datos (como Peso Bruto, Código Postal, Factura, Fecha de Carga o Planta)
+ * sean interpretadas erróneamente como nutrientes.
  */
 export const COLUMN_ALIASES: Record<string, string[]> = {
     date: ['date', 'fecha', 'fec', 'dia', 'time', 'timestamp'],
@@ -53,17 +56,17 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
     Cliente: ['cliente', 'client', 'customer'],
     Proveedor: ['proveedor', 'supplier', 'vendor', 'prov'],
     Origen: ['origen', 'origin', 'procedencia', 'pais'],
-    noId: ['no_id', 'noid', 'id', 'id_muestra', 'muestra', 'sample_id', 'codigo', 'no'],
+    noId: ['no_id', 'noid', 'id_muestra', 'id_sample', 'muestra', 'sample_id', 'codigo_muestra', 'id'],
     
-    // Nutrientes
-    proteina: ['proteina', 'protein', 'cp', 'pb', 'prot'],
+    // Nutrientes (nombres claros y unívocos)
+    proteina: ['proteina', 'protein', 'proteina_cruda', 'crude_protein', 'prot'],
     humedad: ['humedad', 'moisture', 'hum', 'hmd'],
-    grasa: ['grasa', 'fat', 'ee', 'grasas', 'extracto_etereo'],
-    fibra: ['fibra', 'fiber', 'fc', 'fb', 'fibra_cruda'],
-    ceniza: ['ceniza', 'cenizas', 'ash', 'cz'],
+    grasa: ['grasa', 'fat', 'grasas', 'extracto_etereo', 'grasa_cruda', 'crude_fat'],
+    fibra: ['fibra', 'fiber', 'fibra_cruda', 'crude_fiber'],
+    ceniza: ['ceniza', 'cenizas', 'ash'],
     almidon: ['almidon', 'starch'],
-    calcio: ['calcio', 'ca', 'calcium'],
-    fosforo: ['fosforo', 'p', 'phosphorus'],
+    calcio: ['calcio', 'calcium'],
+    fosforo: ['fosforo', 'phosphorus'],
     fda: ['fda', 'adf'],
     fdn: ['fdn', 'ndf'],
     pdi: ['pdi'],
@@ -79,47 +82,24 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
 };
 
 /**
- * Normaliza nombres de materiales (ej. "Maíz" o "Maz" -> "Maiz")
+ * Normaliza nombres de materiales (ej. "Maíz" -> "Maiz") SIN colapsar productos distintos
+ * (ej. "Gluten de Maiz", "DDGS de Maiz", "Germen de Maiz", "Harina de Soya" deben conservar su identidad propia
+ * para no mezclar materias primas con valores nutricionales drásticamente distintos en la misma gráfica).
  */
 export const normalizeMaterialName = (name: string): string => {
     if (!name) return 'Desconocido';
-    const clean = String(name).trim();
-    if (/ma[ií\uFFFD]z/i.test(clean)) return 'Maiz';
-    if (/soya|soja/i.test(clean)) return 'Soya';
-    if (/canola/i.test(clean)) return 'Canola';
-    if (/ddgs/i.test(clean)) return 'DDGS';
-    if (/sorgo/i.test(clean)) return 'Sorgo';
+    let clean = String(name).trim();
+
+    // Reparar posibles caracteres corruptos por codificación ANSI/Latin
+    clean = clean.replace(/ma\uFFFDz/gi, 'Maíz').replace(/so\uFFFDa/gi, 'Soya');
+
+    // Normalizar sólo si el nombre del producto es exclusivamente el grano/materia base
+    if (/^ma[ií]z$/i.test(clean)) return 'Maiz';
+    if (/^so[yj]a$/i.test(clean)) return 'Soya';
+    if (/^c[aá]nola$/i.test(clean)) return 'Canola';
+    if (/^ddgs$/i.test(clean)) return 'DDGS';
+    if (/^sorgo$/i.test(clean)) return 'Sorgo';
+
+    // Conservar nombres compuestos intactos (ej. "Gluten de Maiz", "DDGS Maiz", "Harina de Soya", "Maiz Grano")
     return clean;
-};
-
-/**
- * Detecta si una fila tiene desfasamiento de 1 columna:
- * Proteína quedó vacía (porque tomó una celda vacía de Origen/Proveedor),
- * Humedad tomó el valor de Proteína (~7-9),
- * Grasa tomó el valor de Humedad (~12-15),
- * Fibra tomó el valor de Grasa (~3-5),
- * Ceniza tomó el valor de Fibra (~2).
- */
-export const fixPotentialColumnShift = (newRow: Record<string, any>): boolean => {
-    const hasNoProtein = newRow.proteina === undefined || newRow.proteina === null;
-    const hasMoisture = typeof newRow.humedad === 'number' && !isNaN(newRow.humedad);
-    const hasFat = typeof newRow.grasa === 'number' && !isNaN(newRow.grasa);
-
-    // Si proteína está vacía pero humedad tiene valor de proteína (ej. 7.88)
-    // y grasa tiene un valor típico de humedad (ej. 13.36 en granos/alimentos donde humedad > 9 y grasa > 9):
-    if (hasNoProtein && hasMoisture && hasFat && newRow.grasa > newRow.humedad && newRow.grasa >= 9) {
-        const valProteina = newRow.humedad;
-        const valHumedad = newRow.grasa;
-        const valGrasa = newRow.fibra !== undefined ? newRow.fibra : undefined;
-        const valFibra = newRow.ceniza !== undefined ? newRow.ceniza : undefined;
-        const valCeniza = newRow.almidon !== undefined ? newRow.almidon : undefined;
-
-        newRow.proteina = valProteina;
-        newRow.humedad = valHumedad;
-        if (valGrasa !== undefined) newRow.grasa = valGrasa;
-        if (valFibra !== undefined) newRow.fibra = valFibra;
-        if (valCeniza !== undefined) newRow.ceniza = valCeniza;
-        return true;
-    }
-    return false;
 };

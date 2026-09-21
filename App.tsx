@@ -37,8 +37,7 @@ import {
     decodeFileBuffer, 
     normalizeHeaderKey, 
     COLUMN_ALIASES, 
-    normalizeMaterialName, 
-    fixPotentialColumnShift 
+    normalizeMaterialName 
 } from './csvCleaner';
 
 declare const Papa: any;
@@ -208,8 +207,6 @@ const App: React.FC = () => {
                 });
                 const inferredDateFormat = detectDateFormat(rawDateStrings);
 
-                let shiftedRowsCount = 0;
-
                 const formattedData: RawMaterialData[] = normalizedData
                     .map((row: any) => {
                         // Búsqueda de campo fecha entre alias posibles
@@ -247,14 +244,21 @@ const App: React.FC = () => {
                         };
 
                         NUTRIENTS.forEach(nutrient => {
-                            const aliases = COLUMN_ALIASES[nutrient.key] || [nutrient.key];
+                            // 1. Priorizar coincidencia directa con la columna exacta
                             let rawValue: any = undefined;
-                            for (const alias of aliases) {
-                                if (row[alias] !== undefined && row[alias] !== null && row[alias] !== '') {
-                                    rawValue = row[alias];
-                                    break;
+                            if (row[nutrient.key] !== undefined && row[nutrient.key] !== null && row[nutrient.key] !== '') {
+                                rawValue = row[nutrient.key];
+                            } else {
+                                // 2. Si no existe, revisar únicamente sus alias autorizados
+                                const aliases = COLUMN_ALIASES[nutrient.key] || [];
+                                for (const alias of aliases) {
+                                    if (row[alias] !== undefined && row[alias] !== null && row[alias] !== '') {
+                                        rawValue = row[alias];
+                                        break;
+                                    }
                                 }
                             }
+
                             if (rawValue !== undefined && rawValue !== null) {
                                 const strVal = String(rawValue).trim();
                                 if (strVal !== '' && !strVal.includes('<') && !strVal.includes('>') && !strVal.includes('...') && !strVal.includes('…')) {
@@ -267,11 +271,6 @@ const App: React.FC = () => {
                             }
                         });
 
-                        // Detección y autocorrección de desfasamiento de columnas si las comas saltaron una columna
-                        if (fixPotentialColumnShift(newRow)) {
-                            shiftedRowsCount++;
-                        }
-
                         return newRow;
                     })
                     .filter((row): row is RawMaterialData => row !== null && !!row.date && !!row.material)
@@ -282,9 +281,9 @@ const App: React.FC = () => {
                 }
 
                 if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                    setInfoNotice(`Archivo Excel procesado exitosamente (${formattedData.length} registros). Columnas sincronizadas con posición fija de celda.`);
-                } else if (shiftedRowsCount > 0) {
-                    setInfoNotice(`Aviso: Se detectó y corrigió automáticamente un desfasamiento de columnas en ${shiftedRowsCount} registro(s) (la proteína venía corrida hacia humedad por comas vacías en el archivo CSV).`);
+                    setInfoNotice(`Archivo Excel procesado exitosamente (${formattedData.length} registros). Cada parámetro mapeado a su columna correspondiente.`);
+                } else {
+                    setInfoNotice(null);
                 }
 
                 setRawData(formattedData);
