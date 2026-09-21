@@ -5,6 +5,7 @@ import { InfoIcon } from './icons/InfoIcon';
 import { Logo } from './Logo';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 import { UserProfile } from '../types';
+import { DateInputDDMMYYYY } from './DateInputDDMMYYYY';
 
 interface FilterSelectProps {
     id: string;
@@ -157,7 +158,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                             <div>
                                 <div className="flex justify-between items-center mb-2">
-                                    <label className="block text-sm font-medium text-slate-300">Rango de Fechas</label>
+                                    <label className="block text-sm font-medium text-slate-300">
+                                        Rango de Fechas <span className="text-[11px] text-slate-400 font-mono">(dd/mm/aaaa)</span>
+                                    </label>
                                     <button
                                         onClick={handleClearDates}
                                         className="text-xs text-ui-accent hover:text-cyan-800 underline"
@@ -166,27 +169,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                                     </button>
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
-                                    <div>
-                                        <label htmlFor="start-date" className="block text-xs text-slate-400 mb-1">Inicio</label>
-                                        <input
-                                            type="date"
-                                            id="start-date"
-                                            value={startDate || ''}
-                                            onChange={(e) => setStartDate(e.target.value || null)}
-                                            className="w-full bg-ui-darkest border border-ui-border rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-ui-accent text-slate-100"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label htmlFor="end-date" className="block text-xs text-slate-400 mb-1">Fin</label>
-                                        <input
-                                            type="date"
-                                            id="end-date"
-                                            value={endDate || ''}
-                                            onChange={(e) => setEndDate(e.target.value || null)}
-                                            min={startDate || undefined}
-                                            className="w-full bg-ui-darkest border border-ui-border rounded-md shadow-sm px-2 py-1.5 text-xs focus:ring-1 focus:ring-ui-accent text-slate-100"
-                                        />
-                                    </div>
+                                    <DateInputDDMMYYYY
+                                        id="start-date"
+                                        label="Inicio"
+                                        value={startDate}
+                                        onChange={setStartDate}
+                                        max={endDate || undefined}
+                                    />
+                                    <DateInputDDMMYYYY
+                                        id="end-date"
+                                        label="Fin"
+                                        value={endDate}
+                                        onChange={setEndDate}
+                                        min={startDate || undefined}
+                                    />
                                 </div>
                             </div>
                             

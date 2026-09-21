@@ -38,34 +38,22 @@ export const excelSerialDateToJSDate = (serial: number): Date => {
  * si el formato ambiguo (ej. 8/1/2026 vs 8/4/2026) corresponde a Mes/Día o Día/Mes.
  */
 export const detectDateFormat = (rawDates: (string | number | null | undefined)[]): 'DMY' | 'MDY' => {
-    let hasPart1Over12 = false;
-    let hasPart2Over12 = false;
-    const p1Values = new Set<number>();
-    const p2Values = new Set<number>();
+    let hasPart2Over12 = false; // Si la segunda parte es > 12 (ej. 10/26/2023), entonces es MM/DD/YYYY
 
     for (const item of rawDates) {
         if (!item) continue;
         const str = String(item).trim().split(/[ T]/)[0];
         const m = str.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
         if (m) {
-            const p1 = parseInt(m[1], 10);
             const p2 = parseInt(m[2], 10);
-            if (p1 > 12) hasPart1Over12 = true;
             if (p2 > 12) hasPart2Over12 = true;
-            p1Values.add(p1);
-            p2Values.add(p2);
         }
     }
 
-    if (hasPart1Over12) return 'DMY'; // ej. 26/10/2023 -> primer número > 12 es Día
-    if (hasPart2Over12) return 'MDY'; // ej. 10/26/2023 -> segundo número > 12 es Día
+    // Si la segunda posición es mayor a 12, es forzosamente el día (formato estadounidense MM/DD/YYYY)
+    if (hasPart2Over12) return 'MDY';
 
-    // Si ambos son <= 12 (ej. 8/1/2026 y 8/4/2026):
-    // Si p1 es constante (8 en todas) y p2 varía (1, 4, etc.), p1 es el Mes (Agosto) y p2 es el Día.
-    if (p1Values.size === 1 && p2Values.size > 1) return 'MDY';
-    if (p2Values.size === 1 && p1Values.size > 1) return 'DMY';
-
-    // Por defecto en entornos de habla hispana: Día/Mes/Año
+    // Por defecto y estándar obligatorio en la base de datos: DD/MM/YYYY (Día/Mes/Año)
     return 'DMY';
 };
 
@@ -74,7 +62,7 @@ export const detectDateFormat = (rawDates: (string | number | null | undefined)[
  */
 export const parseFlexibleDate = (
     dateInput: any, 
-    preferredOrder: 'DMY' | 'MDY' | 'AUTO' = 'AUTO'
+    preferredOrder: 'DMY' | 'MDY' | 'AUTO' = 'DMY'
 ): Date | null => {
     if (dateInput === null || dateInput === undefined) return null;
     if (dateInput instanceof Date && !isNaN(dateInput.getTime())) return dateInput;
