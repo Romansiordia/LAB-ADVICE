@@ -107,6 +107,78 @@ Instrucciones para las respuestas:
         });
       });
 
+      server.middlewares.use('/api/proxy-sheet', async (req: any, res: any) => {
+        if (req.method !== 'GET') {
+          res.statusCode = 405;
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        try {
+          const parsedUrl = new URL(req.url, 'http://localhost:3000');
+          const targetUrl = parsedUrl.searchParams.get('url');
+
+          if (!targetUrl) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'El parámetro "url" es requerido.' }));
+            return;
+          }
+
+          if (!targetUrl.includes('docs.google.com/spreadsheets') && !targetUrl.includes('googleusercontent.com')) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: 'URL no permitida. Solo se admiten enlaces de Google Sheets.' }));
+            return;
+          }
+
+          const fetchResponse = await fetch(targetUrl, {
+            headers: {
+              'Accept': 'text/csv, text/plain, */*',
+              'User-Agent': 'Mozilla/5.0 (compatible; LabQualityDashboard/1.0)'
+            }
+          });
+
+          if (!fetchResponse.ok) {
+            if (fetchResponse.status === 401 || fetchResponse.status === 403) {
+              res.statusCode = 403;
+              res.setHeader('Content-Type', 'application/json');
+              res.end(JSON.stringify({
+                error: 'Acceso denegado (403). La hoja de cálculo es privada. En Google Sheets, ve a Compartir y selecciona "Cualquier persona con el enlace puede ser lector".'
+              }));
+              return;
+            }
+            res.statusCode = fetchResponse.status;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({ error: `Google Sheets respondió con código ${fetchResponse.status}` }));
+            return;
+          }
+
+          const text = await fetchResponse.text();
+          if (text.includes('<!DOCTYPE html>') || text.includes('<html')) {
+            res.statusCode = 400;
+            res.setHeader('Content-Type', 'application/json');
+            res.end(JSON.stringify({
+              error: 'Google devolvió una página HTML en vez de datos CSV. Verifica que la hoja tenga permisos de lectura públicos ("Cualquier persona con el enlace").'
+            }));
+            return;
+          }
+
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.end(text);
+        } catch (error: any) {
+          console.error('Error en proxy-sheet de Vite dev:', error);
+          res.statusCode = 500;
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            error: 'Error de conexión al descargar la hoja de Google Sheets.',
+            details: error?.message || String(error)
+          }));
+        }
+      });
+
       server.middlewares.use('/api/login', async (req: any, res: any) => {
         if (req.method !== 'POST') {
           res.statusCode = 405;

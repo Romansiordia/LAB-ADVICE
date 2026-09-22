@@ -33,6 +33,9 @@ import { ClientComparison } from './components/ClientComparison';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { parseFlexibleDate, detectDateFormat } from './dateParser';
+import { DataSourceSelector } from './components/DataSourceSelector';
+import { fetchGoogleSheetCsv } from './googleSheetsService';
+import { RefreshCw, Cloud } from 'lucide-react';
 import { 
     decodeFileBuffer, 
     normalizeHeaderKey, 
@@ -154,6 +157,158 @@ const App: React.FC = () => {
     const [endDate, setEndDate] = useState<string | null>(null);
     const [infoNotice, setInfoNotice] = useState<string | null>(null);
     
+    const processParsedRows = (parsedData: any[], sourceLabel: string, isExcel: boolean) => {
+        // Normalización de cabeceras de columnas (eliminación de tildes, símbolos, espacios)
+        const normalizedData = parsedData.map(row => {
+            const newRow: {[key: string]: any} = {};
+            for (const key in row) { 
+                const cleanKey = normalizeHeaderKey(key);
+                if (cleanKey) {
+                    newRow[cleanKey] = row[key];
+                }
+            }
+            return newRow;
+        });
+
+        // Muestreo para detectar automáticamente si el formato ambiguo es Mes/Día o Día/Mes
+        const rawDateStrings = normalizedData.map(row => {
+            for (const alias of COLUMN_ALIASES.date) {
+                if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
+                    return row[alias];
+                }
+            }
+            return row.date || row.fecha;
+        });
+        const inferredDateFormat = detectDateFormat(rawDateStrings);
+
+        const formattedData: RawMaterialData[] = normalizedData
+            .map((row: any) => {
+                // Búsqueda de campo fecha entre alias posibles
+                let rawDate = null;
+                for (const alias of COLUMN_ALIASES.date) {
+                    if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
+                        rawDate = row[alias];
+                        break;
+                    }
+                }
+                const dateObj = parseFlexibleDate(rawDate, inferredDateFormat);
+                if (!dateObj) return null;
+
+                const findField = (aliases: string[]) => {
+                    for (const a of aliases) {
+                        if (row[a] !== undefined && row[a] !== null && String(row[a]).trim() !== '') {
+                            return String(row[a]).trim();
+                        }
+                    }
+                    return undefined;
+                };
+
+                const rawMaterial = findField(COLUMN_ALIASES.material) || 'Desconocido';
+                const cleanMaterial = normalizeMaterialName(rawMaterial);
+
+                const newRow: RawMaterialData = {
+                    noId: findField(COLUMN_ALIASES.noId),
+                    date: dateObj.toISOString(),
+                    material: cleanMaterial,
+                    subtipo: findField(COLUMN_ALIASES.subtipo),
+                    lote: findField(COLUMN_ALIASES.lote),
+                    Cliente: findField(COLUMN_ALIASES.Cliente),
+                    Proveedor: findField(COLUMN_ALIASES.Proveedor),
+                    Origen: findField(COLUMN_ALIASES.Origen),
+                };
+
+                NUTRIENTS.forEach(nutrient => {
+                    // 1. Priorizar coincidencia directa con la columna exacta
+                    let rawValue: any = undefined;
+                    if (row[nutrient.key] !== undefined && row[nutrient.key] !== null && row[nutrient.key] !== '') {
+                        rawValue = row[nutrient.key];
+                    } else {
+                        // 2. Si no existe, revisar únicamente sus alias autorizados
+                        const aliases = COLUMN_ALIASES[nutrient.key] || [];
+                        for (const alias of aliases) {
+                            if (row[alias] !== undefined && row[alias] !== null && row[alias] !== '') {
+                                rawValue = row[alias];
+                                break;
+                            }
+                        }
+                    }
+
+                    if (rawValue !== undefined && rawValue !== null) {
+                        const strVal = String(rawValue).trim();
+                        if (strVal !== '' && !strVal.includes('<') && !strVal.includes('>') && !strVal.includes('...') && !strVal.includes('…')) {
+                            const cleaned = strVal.replace(/(?:%|ppm|ppb)\s*$/i, '').replace(',', '.').trim();
+                            const parsed = parseFloat(cleaned);
+                            if (!isNaN(parsed) && isFinite(parsed) && /^-?\d*\.?\d+$/.test(cleaned)) {
+                                newRow[nutrient.key] = parsed;
+                            }
+                        }
+                    }
+                });
+
+                return newRow;
+            })
+            .filter((row): row is RawMaterialData => row !== null && !!row.date && !!row.material)
+            .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+        if (formattedData.length === 0) {
+            throw new Error('No se encontraron registros válidos. Verifica que las columnas obligatorias (fecha y materia prima) estén presentes en tu archivo o Google Sheet.');
+        }
+
+        if (isExcel) {
+            setInfoNotice(`Archivo Excel procesado exitosamente (${formattedData.length} registros).`);
+        } else if (sourceLabel.toLowerCase().includes('google sheet')) {
+            setInfoNotice(`Google Sheets sincronizado exitosamente (${formattedData.length} registros cargados desde Google Drive).`);
+        } else {
+            setInfoNotice(null);
+        }
+
+        setRawData(formattedData);
+        setSelectedMaterial(ALL_FILTER);
+    };
+
+    const handleGoogleSheetLoaded = (csvText: string, sourceName = 'Google Sheets') => {
+        try {
+            setIsLoading(true);
+            setError(null);
+            setRawData([]);
+            setIsSampleData(false);
+
+            const parsed = Papa.parse(csvText, {
+                header: true,
+                skipEmptyLines: 'greedy',
+                delimitersToGuess: [',', ';', '\t', '|']
+            });
+
+            if (parsed.errors && parsed.errors.length > 0 && (!parsed.data || parsed.data.length === 0)) {
+                throw new Error(`Error de formato en Google Sheets: ${parsed.errors[0]?.message || 'CSV inválido'}`);
+            }
+
+            processParsedRows(parsed.data, sourceName, false);
+        } catch (e: any) {
+            setError(`Error al procesar Google Sheets: ${e.message}`);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleQuickGoogleSheetSync = async () => {
+        const savedUrl = typeof window !== 'undefined' ? localStorage.getItem('labadvice_google_sheet_url') : null;
+        if (!savedUrl) {
+            setError('No tienes ningún enlace de Google Sheets guardado. Pega la URL en el panel lateral en "Origen de Datos".');
+            return;
+        }
+
+        try {
+            setIsLoading(true);
+            setError(null);
+            const csvText = await fetchGoogleSheetCsv(savedUrl);
+            handleGoogleSheetLoaded(csvText, 'Google Sheets');
+        } catch (err: any) {
+            setError(`Error al sincronizar Google Sheets: ${err.message || String(err)}`);
+            setIsLoading(false);
+        }
+    };
+
     const handleFileParse = (file: File) => {
         setIsLoading(true);
         setError(null);
@@ -184,110 +339,7 @@ const App: React.FC = () => {
                     throw new Error('Formato de archivo no soportado. Por favor utiliza un archivo Excel (.xlsx, .xls) o CSV (.csv)');
                 }
 
-                // Normalización de cabeceras de columnas (eliminación de tildes, símbolos, espacios)
-                const normalizedData = parsedData.map(row => {
-                    const newRow: {[key: string]: any} = {};
-                    for (const key in row) { 
-                        const cleanKey = normalizeHeaderKey(key);
-                        if (cleanKey) {
-                            newRow[cleanKey] = row[key];
-                        }
-                    }
-                    return newRow;
-                });
-
-                // Muestreo para detectar automáticamente si el formato ambiguo (ej. 8/1 vs 8/4) es Mes/Día o Día/Mes
-                const rawDateStrings = normalizedData.map(row => {
-                    for (const alias of COLUMN_ALIASES.date) {
-                        if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
-                            return row[alias];
-                        }
-                    }
-                    return row.date || row.fecha;
-                });
-                const inferredDateFormat = detectDateFormat(rawDateStrings);
-
-                const formattedData: RawMaterialData[] = normalizedData
-                    .map((row: any) => {
-                        // Búsqueda de campo fecha entre alias posibles
-                        let rawDate = null;
-                        for (const alias of COLUMN_ALIASES.date) {
-                            if (row[alias] !== undefined && row[alias] !== null && String(row[alias]).trim() !== '') {
-                                rawDate = row[alias];
-                                break;
-                            }
-                        }
-                        const dateObj = parseFlexibleDate(rawDate, inferredDateFormat);
-                        if (!dateObj) return null;
-
-                        const findField = (aliases: string[]) => {
-                            for (const a of aliases) {
-                                if (row[a] !== undefined && row[a] !== null && String(row[a]).trim() !== '') {
-                                    return String(row[a]).trim();
-                                }
-                            }
-                            return undefined;
-                        };
-
-                        const rawMaterial = findField(COLUMN_ALIASES.material) || 'Desconocido';
-                        const cleanMaterial = normalizeMaterialName(rawMaterial);
-
-                        const newRow: RawMaterialData = {
-                            noId: findField(COLUMN_ALIASES.noId),
-                            date: dateObj.toISOString(),
-                            material: cleanMaterial,
-                            subtipo: findField(COLUMN_ALIASES.subtipo),
-                            lote: findField(COLUMN_ALIASES.lote),
-                            Cliente: findField(COLUMN_ALIASES.Cliente),
-                            Proveedor: findField(COLUMN_ALIASES.Proveedor),
-                            Origen: findField(COLUMN_ALIASES.Origen),
-                        };
-
-                        NUTRIENTS.forEach(nutrient => {
-                            // 1. Priorizar coincidencia directa con la columna exacta
-                            let rawValue: any = undefined;
-                            if (row[nutrient.key] !== undefined && row[nutrient.key] !== null && row[nutrient.key] !== '') {
-                                rawValue = row[nutrient.key];
-                            } else {
-                                // 2. Si no existe, revisar únicamente sus alias autorizados
-                                const aliases = COLUMN_ALIASES[nutrient.key] || [];
-                                for (const alias of aliases) {
-                                    if (row[alias] !== undefined && row[alias] !== null && row[alias] !== '') {
-                                        rawValue = row[alias];
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if (rawValue !== undefined && rawValue !== null) {
-                                const strVal = String(rawValue).trim();
-                                if (strVal !== '' && !strVal.includes('<') && !strVal.includes('>') && !strVal.includes('...') && !strVal.includes('…')) {
-                                    const cleaned = strVal.replace(/(?:%|ppm|ppb)\s*$/i, '').replace(',', '.').trim();
-                                    const parsed = parseFloat(cleaned);
-                                    if (!isNaN(parsed) && isFinite(parsed) && /^-?\d*\.?\d+$/.test(cleaned)) {
-                                        newRow[nutrient.key] = parsed;
-                                    }
-                                }
-                            }
-                        });
-
-                        return newRow;
-                    })
-                    .filter((row): row is RawMaterialData => row !== null && !!row.date && !!row.material)
-                    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-                if (formattedData.length === 0) {
-                    throw new Error('No se encontraron registros válidos. Verifica que las columnas obligatorias (fecha y material) estén presentes.');
-                }
-
-                if (fileExtension === 'xlsx' || fileExtension === 'xls') {
-                    setInfoNotice(`Archivo Excel procesado exitosamente (${formattedData.length} registros). Cada parámetro mapeado a su columna correspondiente.`);
-                } else {
-                    setInfoNotice(null);
-                }
-
-                setRawData(formattedData);
-                setSelectedMaterial(ALL_FILTER);
+                processParsedRows(parsedData, file.name, fileExtension === 'xlsx' || fileExtension === 'xls');
             } catch (e: any) {
                 setError(`Error: ${e.message}`);
             } finally {
@@ -519,12 +571,16 @@ const App: React.FC = () => {
                 user={user}
                 onLogout={handleLogout}
                 onFileParse={handleFileParse}
+                onGoogleSheetLoaded={handleGoogleSheetLoaded}
                 selectedMaterial={selectedMaterial}
                 setSelectedMaterial={setSelectedMaterial}
                 materials={availableMaterials}
                 isLoading={isLoading}
+                setIsLoading={setIsLoading}
                 error={error}
+                onError={setError}
                 infoMessage={infoNotice}
+                onSuccess={setInfoNotice}
                 hasData={rawData.length > 0}
                 isSampleData={isSampleData}
                 onShowFormatHelp={() => setIsModalOpen(true)}
@@ -587,12 +643,21 @@ const App: React.FC = () => {
                         <div className="animate-spin h-10 w-10 border-4 border-cyan-500 border-t-transparent rounded-full"></div>
                     </div>
                 ) : rawData.length === 0 ? (
-                    <div className="flex items-center justify-center h-full">
-                        <div className="text-center p-8 bg-ui-card border border-ui-border rounded-lg max-w-md w-full shadow-lg flex flex-col items-center">
-                            <h2 className="text-2xl font-bold text-slate-100 mb-2">No Hay Datos Para Mostrar</h2>
-                            <p className="text-slate-400 mb-6">Sube un archivo para visualizar tus datos y empezar el análisis pecuario.</p>
-                            <div className="w-full h-32 flex items-center justify-center">
-                                <FileUpload onFileParse={handleFileParse} isLoading={isLoading} />
+                    <div className="flex items-center justify-center h-full py-8">
+                        <div className="text-center p-8 bg-ui-card border border-ui-border rounded-xl max-w-lg w-full shadow-xl flex flex-col items-center">
+                            <h2 className="text-2xl font-bold text-slate-100 mb-2">Cargar Datos de Laboratorio</h2>
+                            <p className="text-slate-400 mb-6 text-sm">
+                                Elige tu método preferido: sube un archivo local (Excel / CSV) o conecta tu Google Sheet alojado en Google Drive.
+                            </p>
+                            <div className="w-full">
+                                <DataSourceSelector 
+                                    onFileParse={handleFileParse} 
+                                    onGoogleSheetLoaded={handleGoogleSheetLoaded}
+                                    isLoading={isLoading} 
+                                    setIsLoading={setIsLoading}
+                                    onError={setError}
+                                    onSuccess={setInfoNotice}
+                                />
                             </div>
                         </div>
                     </div>
@@ -626,6 +691,16 @@ const App: React.FC = () => {
                                     ))}
                                 </div>
                                 <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto md:justify-end">
+                                    <button
+                                        type="button"
+                                        onClick={handleQuickGoogleSheetSync}
+                                        disabled={isLoading}
+                                        className="px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-500/40 shadow-sm flex items-center group disabled:opacity-50 cursor-pointer"
+                                        title="Sincronizar datos más recientes desde tu Google Sheet"
+                                    >
+                                        <RefreshCw className={`w-4 h-4 mr-2 text-emerald-400 ${isLoading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                                        <span>Sincronizar Sheets</span>
+                                    </button>
                                     <div>
                                         <label className="px-4 py-2.5 rounded-lg text-sm font-medium transition-all whitespace-nowrap text-slate-300 bg-ui-card border border-ui-border shadow-sm hover:bg-transparentest cursor-pointer flex items-center group">
                                             {isLoading ? (

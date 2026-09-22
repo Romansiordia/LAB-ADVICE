@@ -1,11 +1,13 @@
 
-import React from 'react';
+import React, { useState } from 'react';
 import { FileUpload } from './FileUpload';
 import { InfoIcon } from './icons/InfoIcon';
 import { Logo } from './Logo';
 import { ChevronLeftIcon } from './icons/ChevronLeftIcon';
 import { UserProfile } from '../types';
 import { DateInputDDMMYYYY } from './DateInputDDMMYYYY';
+import { DataSourceSelector } from './DataSourceSelector';
+import { Cloud, ChevronDown } from 'lucide-react';
 
 interface FilterSelectProps {
     id: string;
@@ -36,12 +38,16 @@ const FilterSelect: React.FC<FilterSelectProps> = ({ id, label, value, onChange,
 
 interface SidebarProps {
     onFileParse: (file: File) => void;
+    onGoogleSheetLoaded: (csvText: string, sourceName?: string) => void;
     selectedMaterial: string;
     setSelectedMaterial: (material: string) => void;
     materials: string[];
     isLoading: boolean;
+    setIsLoading: (loading: boolean) => void;
     error: string | null;
+    onError: (err: string | null) => void;
     infoMessage?: string | null;
+    onSuccess: (msg: string | null) => void;
     hasData: boolean;
     isSampleData: boolean;
     onShowFormatHelp: () => void;
@@ -79,12 +85,16 @@ interface SidebarProps {
 
 export const Sidebar: React.FC<SidebarProps> = ({
     onFileParse,
+    onGoogleSheetLoaded,
     selectedMaterial,
     setSelectedMaterial,
     materials,
     isLoading,
+    setIsLoading,
     error,
+    onError,
     infoMessage,
+    onSuccess,
     hasData,
     isSampleData,
     onShowFormatHelp,
@@ -112,6 +122,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     user = null,
     onLogout
 }) => {
+    const [showSourceManager, setShowSourceManager] = useState<boolean>(!hasData);
+
     const handleClearDates = () => {
         setStartDate(null);
         setEndDate(null);
@@ -143,6 +155,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             <span>{infoMessage}</span>
                         </div>
                     )}
+
+                    {/* Origen de Datos: Carga local de Excel o Sincronización Google Sheets */}
+                    <div className="mb-4 flex-shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => setShowSourceManager(!showSourceManager)}
+                            className="w-full flex items-center justify-between p-2.5 bg-ui-darkest/70 hover:bg-ui-darkest border border-ui-border rounded-xl text-xs font-semibold text-slate-200 transition-colors"
+                        >
+                            <span className="flex items-center gap-2">
+                                <Cloud className="w-4 h-4 text-emerald-400" />
+                                <span>Origen de Datos</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 flex items-center gap-1 font-normal">
+                                {showSourceManager ? 'Ocultar' : 'Cambiar / Sincronizar'}
+                                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showSourceManager ? 'rotate-180' : ''}`} />
+                            </span>
+                        </button>
+
+                        {showSourceManager && (
+                            <div className="mt-2 p-2 bg-ui-darkest/50 border border-ui-border rounded-xl">
+                                <DataSourceSelector
+                                    onFileParse={onFileParse}
+                                    onGoogleSheetLoaded={onGoogleSheetLoaded}
+                                    isLoading={isLoading}
+                                    setIsLoading={setIsLoading}
+                                    onError={onError}
+                                    onSuccess={onSuccess}
+                                    compact={true}
+                                />
+                            </div>
+                        )}
+                    </div>
 
                     {hasData && (
                         <div className="flex flex-col space-y-6 overflow-y-auto pr-2 pt-2 custom-scrollbar flex-1 pb-4">
