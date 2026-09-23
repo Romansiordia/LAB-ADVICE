@@ -34,6 +34,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { parseFlexibleDate, detectDateFormat } from './dateParser';
 import { DataSourceSelector } from './components/DataSourceSelector';
+import { GoogleSheetModal } from './components/GoogleSheetModal';
 import { fetchGoogleSheetCsv } from './googleSheetsService';
 import { RefreshCw, Cloud } from 'lucide-react';
 import { 
@@ -94,6 +95,7 @@ const App: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
     const [isSampleData, setIsSampleData] = useState<boolean>(true);
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+    const [isSheetModalOpen, setIsSheetModalOpen] = useState<boolean>(false);
     
     const [zoomConfig, setZoomConfig] = useState<ZoomConfig | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
@@ -693,10 +695,10 @@ const App: React.FC = () => {
                                 <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto md:justify-end">
                                     <button
                                         type="button"
-                                        onClick={handleQuickGoogleSheetSync}
+                                        onClick={() => setIsSheetModalOpen(true)}
                                         disabled={isLoading}
                                         className="px-3.5 py-2.5 rounded-lg text-sm font-semibold transition-all whitespace-nowrap text-emerald-300 bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-500/40 shadow-sm flex items-center group disabled:opacity-50 cursor-pointer"
-                                        title="Sincronizar datos más recientes desde tu Google Sheet"
+                                        title="Conectar o sincronizar con Google Sheets"
                                     >
                                         <RefreshCw className={`w-4 h-4 mr-2 text-emerald-400 ${isLoading ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
                                         <span>Sincronizar Sheets</span>
@@ -1172,6 +1174,16 @@ const App: React.FC = () => {
             </ChartZoomModal>
 
             <DataFormatModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+            <GoogleSheetModal
+                isOpen={isSheetModalOpen}
+                onClose={() => setIsSheetModalOpen(false)}
+                onCsvDataLoaded={handleGoogleSheetLoaded}
+                isLoading={isLoading}
+                setIsLoading={setIsLoading}
+                onError={setError}
+                onSuccess={setInfoNotice}
+            />
         </div>
     );
 };
