@@ -13,6 +13,7 @@ export const NUTRIENTS = [
     { key: 'fda', label: 'FDA (%)', color: '#f97316', category: 'nutrients' }, // Orange
     { key: 'fdn', label: 'FDN (%)', color: '#14b8a6', category: 'nutrients' }, // Teal
     { key: 'pdi', label: 'PDI (%)', color: '#84cc16', category: 'nutrients' }, // Lime
+    { key: 'xantofilas', label: 'Xantofilas (ppm)', color: '#eab308', category: 'nutrients' }, // Amber/Yellow
     { key: 'tamano_particula', label: 'Tamaño de Partícula (µm)', color: '#a855f7', category: 'nutrients' }, // Purple
     
     // Mycotoxins

@@ -70,6 +70,7 @@ export const COLUMN_ALIASES: Record<string, string[]> = {
     fda: ['fda', 'adf'],
     fdn: ['fdn', 'ndf'],
     pdi: ['pdi'],
+    xantofilas: ['xantofilas', 'xantofila', 'xanfotlas', 'xanfofilas', 'xanthophylls', 'xanthophyll'],
     tamano_particula: ['tamano_particula', 'tamano_de_particula', 'particle_size', 'granulometria'],
 
     // Micotoxinas

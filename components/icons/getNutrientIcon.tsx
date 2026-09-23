@@ -13,7 +13,8 @@ import {
     ShieldAlert,
     AlertTriangle,
     Biohazard,
-    Flame
+    Flame,
+    Sun
 } from 'lucide-react';
 
 export const getNutrientIcon = (key: string, className?: string) => {
@@ -44,6 +45,12 @@ export const getNutrientIcon = (key: string, className?: string) => {
         case 'fosforo':
         case 'fósforo':
             return <Atom className={className} />;
+        case 'xantofilas':
+        case 'xantofila':
+        case 'xanfotlas':
+        case 'xanfofilas':
+        case 'xanthophylls':
+            return <Sun className={className} />;
         case 'aflatoxina':
             return <Skull className={className} />;
         case 'ocratoxina':
