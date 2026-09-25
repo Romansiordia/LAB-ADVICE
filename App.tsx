@@ -36,7 +36,7 @@ import { parseFlexibleDate, detectDateFormat } from './dateParser';
 import { DataSourceSelector } from './components/DataSourceSelector';
 import { GoogleSheetModal } from './components/GoogleSheetModal';
 import { fetchGoogleSheetCsv } from './googleSheetsService';
-import { RefreshCw, Cloud } from 'lucide-react';
+import { RefreshCw, Cloud, Sun, Moon } from 'lucide-react';
 import { 
     decodeFileBuffer, 
     normalizeHeaderKey, 
@@ -100,30 +100,33 @@ const App: React.FC = () => {
     const [zoomConfig, setZoomConfig] = useState<ZoomConfig | null>(null);
     const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
     const [isGeneratingPdf, setIsGeneratingPdf] = useState<boolean>(false);
+    const [isPdfWhiteMode, setIsPdfWhiteMode] = useState<boolean>(false);
+    const isEffectiveWhiteTheme = isGeneratingPdf || isPdfWhiteMode;
     
     const handleGeneratePdf = async () => {
         setIsGeneratingPdf(true);
-        // Wait for React to render the full report view and charts to resize
+        // Esperar a que React renderice la vista completa en modo fondo blanco y las gráficas se recalculen
         await new Promise(resolve => setTimeout(resolve, 800));
         
         try {
             const element = document.getElementById('report-content');
             if (element) {
-                // Force scroll to top to avoid cut off
+                // Scroll al inicio para captura completa
                 window.scrollTo(0, 0);
                 
                 const canvas = await html2canvas(element, { 
                     scale: 2, 
                     useCORS: true, 
-                    backgroundColor: '#163c65', // Match background color for better look
-                    windowWidth: 1200, // Force desktop width for PDF rendering to avoid dozens of mobile pages
-                    onclone: (document) => {
-                        const el = document.getElementById('report-content');
+                    backgroundColor: '#ffffff', // Fondo blanco de impresión de alta fidelidad
+                    windowWidth: 1200, // Ancho de escritorio forzado para evitar cortes
+                    onclone: (clonedDoc) => {
+                        const el = clonedDoc.getElementById('report-content');
                         if (el) {
-                           // Force specific styles for PDF
                            el.style.width = '1200px';
                            el.style.maxWidth = '1200px';
-                           el.style.margin = '0';
+                           el.style.margin = '0 auto';
+                           el.style.backgroundColor = '#ffffff';
+                           el.style.color = '#0f172a';
                         }
                     }
                 });
@@ -144,6 +147,7 @@ const App: React.FC = () => {
             setIsGeneratingPdf(false);
         }
     };
+
 
     const [selectedMaterial, setSelectedMaterial] = useState<string>(ALL_FILTER);
     const [currentView, setCurrentView] = useState<ViewMode>('general');
@@ -742,45 +746,126 @@ const App: React.FC = () => {
                                         ))}
                                     </select>
                                     <button
+                                        type="button"
+                                        onClick={() => setIsPdfWhiteMode(!isPdfWhiteMode)}
+                                        className={`flex items-center justify-center border py-2 px-3 rounded-lg transition-all text-xs font-bold gap-1.5 shrink-0 ${
+                                            isPdfWhiteMode 
+                                                ? 'bg-amber-400/15 text-amber-300 border-amber-400/40 hover:bg-amber-400/25 shadow-sm' 
+                                                : 'bg-ui-darkest border-ui-border text-slate-300 hover:border-ui-accent hover:text-ui-accent'
+                                        }`}
+                                        title={isPdfWhiteMode ? 'Regresar a vista oscura' : 'Vista previa del reporte en fondo blanco'}
+                                    >
+                                        {isPdfWhiteMode ? (
+                                            <>
+                                                <Moon className="w-3.5 h-3.5 text-amber-300" />
+                                                <span className="hidden sm:inline">Modo Oscuro</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sun className="w-3.5 h-3.5 text-amber-400" />
+                                                <span className="hidden sm:inline">Fondo Blanco</span>
+                                            </>
+                                        )}
+                                    </button>
+                                    <button
                                         onClick={handleGeneratePdf}
-                                        className="flex items-center justify-center bg-ui-darkest border border-ui-border text-slate-300 py-2.5 px-4 rounded-lg hover:border-ui-accent hover:text-ui-accent transition-all shrink-0"
+                                        className="flex items-center justify-center bg-ui-accent text-[#040d1a] font-bold py-2.5 px-4 rounded-lg hover:bg-cyan-300 transition-all shadow-[0_0_15px_rgba(0,222,255,0.25)] shrink-0 disabled:opacity-50"
                                         disabled={multiTrendData.length === 0 || isLoading || isGeneratingPdf}
-                                        title="Generar PDF"
+                                        title="Descargar Reporte PDF con fondo blanco"
                                     >
                                         {isGeneratingPdf ? (
-                                            <div className="animate-spin h-5 w-5 border-2 border-slate-500 border-t-transparent rounded-full" />
+                                            <div className="flex items-center space-x-2">
+                                                <div className="animate-spin h-4 w-4 border-2 border-[#040d1a] border-t-transparent rounded-full" />
+                                                <span className="text-xs">Generando PDF...</span>
+                                            </div>
                                         ) : (
-                                            <DownloadIcon />
+                                            <div className="flex items-center space-x-1.5">
+                                                <DownloadIcon />
+                                                <span className="text-xs">Exportar PDF</span>
+                                            </div>
                                         )}
                                     </button>
                                 </div>
                             </div>
                         </header>
                         
-                        <div className="max-w-[1600px] mx-auto p-4 bg-transparent" id="report-content">
+                        <div 
+                            className={`max-w-[1600px] mx-auto p-4 md:p-6 transition-all duration-300 ${
+                                isEffectiveWhiteTheme 
+                                    ? 'bg-white text-slate-800 rounded-2xl shadow-xl border border-slate-200' 
+                                    : 'bg-transparent text-slate-100'
+                            }`} 
+                            id="report-content"
+                        >
                             {selectedCliente !== ALL_FILTER && (
                                 <ClientComparison 
                                     clientName={selectedCliente} 
                                     category={selectedCategory} 
                                     kpis={clientVsGlobalKpis} 
+                                    isPdfMode={isEffectiveWhiteTheme}
                                 />
                             )}
 
                             {isGeneratingPdf && (
-                                <div className="mb-8 bg-ui-card p-6 rounded-xl shadow-sm border border-ui-border">
-                                    <h1 className="text-2xl md:text-3xl font-bold text-slate-100 mb-2">
-                                        Reporte de Calidad: <span className="text-ui-accent">{selectedMaterial}</span>
-                                    </h1>
-                                    <p className="text-slate-400 mb-6 text-sm">Generado el {new Date().toLocaleDateString()}</p>
-                                    <h2 className="text-xl font-bold text-slate-100 mb-4 flex items-center">
+                                <div className="mb-8 bg-white p-6 md:p-8 rounded-2xl shadow-sm border border-slate-200 text-slate-800">
+                                    <div className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-slate-200 gap-4 mb-6">
+                                        <div className="flex items-center space-x-4">
+                                            <img 
+                                                src="/logo-labadvice.png" 
+                                                alt="LAB ADVICE Logo" 
+                                                className="h-12 w-auto object-contain"
+                                                onError={(e: any) => { e.currentTarget.style.display = 'none'; }}
+                                            />
+                                            <div>
+                                                <span className="text-[10px] font-black uppercase tracking-widest text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded border border-sky-200">
+                                                    Informe de Control de Calidad
+                                                </span>
+                                                <h1 className="text-2xl md:text-3xl font-black text-slate-900 mt-1 tracking-tight">
+                                                    Reporte Técnico: <span className="text-sky-700">{selectedMaterial}</span>
+                                                </h1>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600 bg-slate-50 border border-slate-200 px-4 py-2 rounded-xl">
+                                            <span>Generado: <strong className="text-slate-900 font-bold">{new Date().toLocaleDateString('es-ES', { dateStyle: 'long' })}</strong></span>
+                                            <span className="text-slate-300">|</span>
+                                            <span>Muestras: <strong className="text-slate-900 font-bold">{multiTrendData.length}</strong></span>
+                                        </div>
+                                    </div>
+
+                                    {/* Badges de filtros activos */}
+                                    <div className="flex flex-wrap gap-2 mb-6 text-xs font-semibold">
+                                        {selectedCliente !== ALL_FILTER && (
+                                            <span className="bg-sky-50 text-sky-800 border border-sky-200 px-3 py-1 rounded-lg">
+                                                Cliente: {selectedCliente}
+                                            </span>
+                                        )}
+                                        {selectedProveedor !== ALL_FILTER && (
+                                            <span className="bg-slate-100 text-slate-700 border border-slate-300 px-3 py-1 rounded-lg">
+                                                Proveedor: {selectedProveedor}
+                                            </span>
+                                        )}
+                                        {selectedSubtipo !== ALL_FILTER && (
+                                            <span className="bg-slate-100 text-slate-700 border border-slate-300 px-3 py-1 rounded-lg">
+                                                Subtipo: {selectedSubtipo}
+                                            </span>
+                                        )}
+                                        {selectedLote !== ALL_FILTER && (
+                                            <span className="bg-slate-100 text-slate-700 border border-slate-300 px-3 py-1 rounded-lg">
+                                                Lote: {selectedLote}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <h2 className="text-lg font-black text-slate-900 mb-4 flex items-center">
                                         <TableIcon />
                                         <span className="ml-2">Resumen Estadístico Completo</span>
                                     </h2>
-                                    <div className="border text-sm max-w-full overflow-auto border-ui-border rounded-xl p-4">
-                                        <NutrientStatsTable data={multiTrendData} material={selectedMaterial} />
+                                    <div className="border border-slate-200 rounded-xl overflow-hidden p-2 bg-slate-50/50">
+                                        <NutrientStatsTable data={multiTrendData} material={selectedMaterial} isPdfMode={true} />
                                     </div>
                                 </div>
                             )}
+
 
                             {(isGeneratingPdf || ['general', 'histograms', 'monthly_trends'].includes(currentView)) && (
                                 <div className="space-y-8">
@@ -843,13 +928,13 @@ const App: React.FC = () => {
                                             <div className="space-y-3">
                                                 <div className="px-1 flex justify-between items-center">
                                                     <div>
-                                                        <h4 className="text-sm font-semibold uppercase tracking-wider text-ui-accent">Monitoreo y Control de Riesgos por Micotoxinas</h4>
-                                                        <p className="text-xs text-slate-400">Indicadores de riesgo integrados con análisis estadístico de promedio, desviación estándar y tasa de rechazo.</p>
+                                                        <h4 className={`text-sm font-bold uppercase tracking-wider ${isEffectiveWhiteTheme ? 'text-sky-800' : 'text-ui-accent'}`}>Monitoreo y Control de Riesgos por Micotoxinas</h4>
+                                                        <p className={`text-xs ${isEffectiveWhiteTheme ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>Indicadores de riesgo integrados con análisis estadístico de promedio, desviación estándar y tasa de rechazo.</p>
                                                     </div>
-                                                    <div className="flex items-center gap-4 text-[10px] font-semibold text-slate-400">
-                                                        <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-emerald-500/20 border border-emerald-500/40" /> Seguro</div>
-                                                        <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-amber-500/20 border border-amber-500/40" /> Límite</div>
-                                                        <div className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded bg-red-500/20 border border-red-500/40" /> Crítico</div>
+                                                    <div className={`flex items-center gap-4 text-[10px] font-bold ${isEffectiveWhiteTheme ? 'text-slate-600' : 'text-slate-400'}`}>
+                                                        <div className="flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded ${isEffectiveWhiteTheme ? 'bg-emerald-100 border border-emerald-400' : 'bg-emerald-500/20 border border-emerald-500/40'}`} /> Seguro</div>
+                                                        <div className="flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded ${isEffectiveWhiteTheme ? 'bg-amber-100 border border-amber-400' : 'bg-amber-500/20 border border-amber-500/40'}`} /> Límite</div>
+                                                        <div className="flex items-center gap-1"><span className={`w-2.5 h-2.5 rounded ${isEffectiveWhiteTheme ? 'bg-rose-100 border border-rose-400' : 'bg-red-500/20 border border-red-500/40'}`} /> Crítico</div>
                                                     </div>
                                                 </div>
                                                 
@@ -888,6 +973,7 @@ const App: React.FC = () => {
                                                                 stdDev={stdDev}
                                                                 rejectionRate={rejectionRate}
                                                                 onClick={() => startTransition(() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key }))}
+                                                                isPdfMode={isEffectiveWhiteTheme}
                                                             />
                                                         );
                                                     })}
@@ -941,6 +1027,7 @@ const App: React.FC = () => {
                                                         icon={getNutrientIcon(nutrient.key, "w-4 h-4 text-white stroke-[2]")}
                                                         color={nutrient.color || '#0ea5e9'}
                                                         onClick={() => startTransition(() => setZoomConfig({ type: currentView === 'histograms' ? 'histogram' : currentView === 'monthly_trends' ? 'monthly' : 'daily', key: nutrient.key }))}
+                                                        isPdfMode={isEffectiveWhiteTheme}
                                                     />
                                                 );
                                             })}
@@ -950,8 +1037,8 @@ const App: React.FC = () => {
                                     {(!isGeneratingPdf && currentView === 'general') && (
                                         <div className="animate-fade-in mt-8">
                                             <div className="mb-6 px-1">
-                                                <h2 className="text-xl font-bold text-slate-100">Tendencias de Parámetros</h2>
-                                                <p className="text-slate-400 text-sm mt-1">Valor promedio de cada parámetro a lo largo del tiempo según los filtros actuales.</p>
+                                                <h2 className={`text-xl font-bold ${isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-100'}`}>Tendencias de Parámetros</h2>
+                                                <p className={`text-sm mt-1 ${isEffectiveWhiteTheme ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>Valor promedio de cada parámetro a lo largo del tiempo según los filtros actuales.</p>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 {availableNutrients.map((nutrient) => {
@@ -963,18 +1050,25 @@ const App: React.FC = () => {
                                                     const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
 
                                                     return (
-                                                        <div key={`trend-${nutrient.key}`} className="relative bg-ui-card border border-ui-border rounded-xl p-5 shadow-lg">
-                                                            <div className="flex items-center space-x-2 border-b border-ui-border/50 pb-3 mb-4">
-                                                                <div className="text-slate-400">
+                                                        <div key={`trend-${nutrient.key}`} className={`relative rounded-xl p-5 border shadow-sm ${
+                                                            isEffectiveWhiteTheme ? 'bg-white border-slate-200 text-slate-800' : 'bg-ui-card border-ui-border shadow-lg'
+                                                        }`}>
+                                                            <div className={`flex items-center space-x-2 border-b pb-3 mb-4 ${
+                                                                isEffectiveWhiteTheme ? 'border-slate-200' : 'border-ui-border/50'
+                                                            }`}>
+                                                                <div className={isEffectiveWhiteTheme ? 'text-sky-700' : 'text-slate-400'}>
                                                                     {getNutrientIcon(nutrient.key, "w-5 h-5")}
                                                                 </div>
-                                                                <h3 className="text-[14px] font-bold text-slate-200">Tendencia de {cleanLabel}</h3>
+                                                                <h3 className={`text-[14px] font-bold ${
+                                                                    isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-200'
+                                                                }`}>Tendencia de {cleanLabel}</h3>
                                                             </div>
                                                             <div className="h-[220px]" onClick={() => setZoomConfig({ type: 'daily', key: nutrient.key })}>
                                                                 <TrendChart 
                                                                     data={chartData} 
                                                                     nutrient={nutrient.label} 
                                                                     color={nutrient.color || '#0ea5e9'}
+                                                                    isPdfMode={isEffectiveWhiteTheme}
                                                                 />
                                                             </div>
                                                         </div>
@@ -987,8 +1081,8 @@ const App: React.FC = () => {
                                     {(!isGeneratingPdf && currentView === 'histograms') && (
                                         <div className="animate-fade-in mt-8">
                                             <div className="mb-6 px-1">
-                                                <h2 className="text-xl font-bold text-slate-100">Distribución de Parámetros</h2>
-                                                <p className="text-slate-400 text-sm mt-1">Histograma de cada parámetro en todas las muestras según los filtros actuales.</p>
+                                                <h2 className={`text-xl font-bold ${isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-100'}`}>Distribución de Parámetros</h2>
+                                                <p className={`text-sm mt-1 ${isEffectiveWhiteTheme ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>Histograma de cada parámetro en todas las muestras según los filtros actuales.</p>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                                 {availableNutrients.map((nutrient) => {
@@ -1000,12 +1094,18 @@ const App: React.FC = () => {
                                                     const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
 
                                                     return (
-                                                        <div key={`hist-${nutrient.key}`} className="relative bg-ui-card border border-ui-border rounded-xl p-5 shadow-lg">
-                                                            <div className="flex items-center space-x-2 border-b border-ui-border/50 pb-3 mb-4">
-                                                                <div className="text-slate-400">
+                                                        <div key={`hist-${nutrient.key}`} className={`relative rounded-xl p-5 border shadow-sm ${
+                                                            isEffectiveWhiteTheme ? 'bg-white border-slate-200 text-slate-800' : 'bg-ui-card border-ui-border shadow-lg'
+                                                        }`}>
+                                                            <div className={`flex items-center space-x-2 border-b pb-3 mb-4 ${
+                                                                isEffectiveWhiteTheme ? 'border-slate-200' : 'border-ui-border/50'
+                                                            }`}>
+                                                                <div className={isEffectiveWhiteTheme ? 'text-sky-700' : 'text-slate-400'}>
                                                                     {getNutrientIcon(nutrient.key, "w-5 h-5")}
                                                                 </div>
-                                                                <h3 className="text-[14px] font-bold text-slate-200">Distribución de {cleanLabel}</h3>
+                                                                <h3 className={`text-[14px] font-bold ${
+                                                                    isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-200'
+                                                                }`}>Distribución de {cleanLabel}</h3>
                                                             </div>
                                                             <div className="h-[220px]" onClick={() => setZoomConfig({ type: 'histogram', key: nutrient.key })}>
                                                                 <HistogramChart 
@@ -1013,6 +1113,7 @@ const App: React.FC = () => {
                                                                     nutrient={nutrient.label} 
                                                                     color={nutrient.color || '#f97316'}
                                                                     isCompact={false}
+                                                                    isPdfMode={isEffectiveWhiteTheme}
                                                                 />
                                                             </div>
                                                         </div>
@@ -1025,17 +1126,18 @@ const App: React.FC = () => {
 
                             {(!isGeneratingPdf && currentView === 'monthly_trends') && (
                                 <div className="animate-fade-in mt-8">
-                                    <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
+                                    <h2 className={`text-xl font-bold mb-2 px-1 flex items-center ${isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-100'}`}>
                                         <CalendarIcon />
                                         <span className="ml-2">Promedios Mensuales Consolidados</span>
                                     </h2>
-                                    <p className="text-xs text-slate-400 mb-6 px-1 ml-7 max-w-4xl leading-relaxed">
-                                        Estas tarjetas muestran el promedio consolidado correspondiente al <span className="text-slate-200 font-semibold">último mes con datos registrados</span> en su secuencia. Los indicadores visuales superiores muestran el <span className="text-slate-200 font-semibold">promedio general acumulado</span> de todos los registros en el periodo seleccionado.
+                                    <p className={`text-xs mb-6 px-1 ml-7 max-w-4xl leading-relaxed ${isEffectiveWhiteTheme ? 'text-slate-600 font-medium' : 'text-slate-400'}`}>
+                                        Estas tarjetas muestran el promedio consolidado correspondiente al <span className={isEffectiveWhiteTheme ? 'text-slate-900 font-bold' : 'text-slate-200 font-semibold'}>último mes con datos registrados</span> en su secuencia. Los indicadores visuales superiores muestran el <span className={isEffectiveWhiteTheme ? 'text-slate-900 font-bold' : 'text-slate-200 font-semibold'}>promedio general acumulado</span> de todos los registros en el periodo seleccionado.
                                     </p>
                                     <ParameterMonthlyTrends 
                                         data={multiTrendData} 
                                         onExpand={(key) => setZoomConfig({ type: 'monthly', key })}
                                         category={selectedCategory}
+                                        isPdfMode={isEffectiveWhiteTheme}
                                     />
                                 </div>
                             )}
@@ -1043,16 +1145,20 @@ const App: React.FC = () => {
                             {(isGeneratingPdf || currentView === 'statistics') && (
                                 <div className="animate-fade-in mt-8 space-y-8">
                                     <div>
-                                        <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
+                                        <h2 className={`text-xl font-bold mb-6 px-1 flex items-center ${isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-100'}`}>
                                             <TableIcon />
                                             <span className="ml-2">Estadísticas Descriptivas</span>
                                         </h2>
-                                        <div className="bg-ui-card border text-sm max-w-full overflow-auto border-ui-border rounded-2xl p-6 shadow-sm">
-                                            <h3 className="text-slate-300 font-semibold mb-4 text-sm uppercase tracking-widest flex items-center">
+                                        <div className={`border text-sm max-w-full overflow-auto rounded-2xl p-6 shadow-sm ${
+                                            isEffectiveWhiteTheme ? 'bg-white border-slate-200 text-slate-800' : 'bg-ui-card border-ui-border'
+                                        }`}>
+                                            <h3 className={`font-bold mb-4 text-xs uppercase tracking-widest flex items-center ${
+                                                isEffectiveWhiteTheme ? 'text-slate-700' : 'text-slate-300'
+                                            }`}>
                                                 <span className="mr-2"><TableIcon /></span> 
                                                 Tabla de Calidad: {selectedMaterial}
                                             </h3>
-                                            <NutrientStatsTable data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
+                                            <NutrientStatsTable data={multiTrendData} material={selectedMaterial} category={selectedCategory} isPdfMode={isEffectiveWhiteTheme} />
                                         </div>
                                     </div>
                                 </div>
@@ -1060,22 +1166,18 @@ const App: React.FC = () => {
 
                             {(isGeneratingPdf || currentView === 'supplier_quality') && (
                                 <div className="animate-fade-in mt-8">
-                                    <h2 className="text-xl font-bold text-slate-100 mb-6 px-1 flex items-center">
-                                        <ShieldCheckIcon />
-                                        <span className="ml-2">Evaluación de Proveedores</span>
-                                    </h2>
-                                    <SupplierAnalysis data={multiTrendData} material={selectedMaterial} category={selectedCategory} />
+                                    <SupplierAnalysis data={multiTrendData} material={selectedMaterial} category={selectedCategory} isPdfMode={isEffectiveWhiteTheme} />
                                 </div>
                             )}
 
                             {isGeneratingPdf && (
                                 <div className="mt-8 space-y-8">
-                                    <div className="border-t border-ui-border/50 pt-8">
-                                        <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
+                                    <div className="border-t border-slate-200 pt-8">
+                                        <h2 className="text-xl font-black text-slate-900 mb-2 px-1 flex items-center">
                                             <CalendarIcon />
                                             <span className="ml-2">Tendencias Mensuales: Parámetros Nutricionales</span>
                                         </h2>
-                                        <p className="text-xs text-slate-400 mb-6 px-1 ml-7">
+                                        <p className="text-xs text-slate-600 font-medium mb-6 px-1 ml-7">
                                             Historial consolidado mes a mes de los componentes nutricionales del material actual.
                                         </p>
                                         <div className="grid grid-cols-2 gap-6">
@@ -1084,17 +1186,19 @@ const App: React.FC = () => {
                                                 if (chartData.length === 0) return null;
                                                 const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
                                                 return (
-                                                    <div key={`pdf-monthly-${nutrient.key}`} className="bg-ui-card border border-ui-border rounded-xl p-4 shadow-sm flex flex-col h-[260px]">
-                                                        <h3 className="text-xs font-bold text-slate-300 mb-3 uppercase tracking-wider flex items-center">
-                                                            <span className="mr-1.5">{getNutrientIcon(nutrient.key, "w-3.5 h-3.5 text-ui-accent")}</span>
+                                                    <div key={`pdf-monthly-${nutrient.key}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col h-[260px]">
+                                                        <h3 className="text-xs font-bold text-slate-800 mb-3 uppercase tracking-wider flex items-center">
+                                                            <span className="mr-1.5">{getNutrientIcon(nutrient.key, "w-3.5 h-3.5 text-sky-700")}</span>
                                                             {cleanLabel} ({nutrient.label.includes('%') ? '%' : nutrient.label.includes('ppm') ? 'ppm' : 'ppb'})
                                                         </h3>
                                                         <div className="flex-1 min-h-0">
                                                             <MonthlyTrendChart 
                                                                 data={chartData} 
                                                                 nutrient={cleanLabel} 
+                                                                color={nutrient.color}
                                                                 isCompact={true}
                                                                 showAxes={true}
+                                                                isPdfMode={true}
                                                             />
                                                         </div>
                                                     </div>
@@ -1103,12 +1207,12 @@ const App: React.FC = () => {
                                         </div>
                                     </div>
 
-                                    <div className="border-t border-ui-border/50 pt-8">
-                                        <h2 className="text-xl font-bold text-slate-100 mb-2 px-1 flex items-center">
+                                    <div className="border-t border-slate-200 pt-8">
+                                        <h2 className="text-xl font-black text-slate-900 mb-2 px-1 flex items-center">
                                             <CalendarIcon />
                                             <span className="ml-2">Tendencias Mensuales: Micotoxinas</span>
                                         </h2>
-                                        <p className="text-xs text-slate-400 mb-6 px-1 ml-7">
+                                        <p className="text-xs text-slate-600 font-medium mb-6 px-1 ml-7">
                                             Historial consolidado mes a mes del nivel de micotoxinas detectado en las muestras.
                                         </p>
                                         <div className="grid grid-cols-2 gap-6">
@@ -1117,17 +1221,19 @@ const App: React.FC = () => {
                                                 if (chartData.length === 0) return null;
                                                 const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
                                                 return (
-                                                    <div key={`pdf-monthly-myco-${nutrient.key}`} className="bg-ui-card border border-ui-border rounded-xl p-4 shadow-sm flex flex-col h-[260px]">
-                                                        <h3 className="text-xs font-bold text-slate-300 mb-3 uppercase tracking-wider flex items-center">
-                                                            <span className="mr-1.5">{getNutrientIcon(nutrient.key, "w-3.5 h-3.5 text-ui-accent")}</span>
+                                                    <div key={`pdf-monthly-myco-${nutrient.key}`} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col h-[260px]">
+                                                        <h3 className="text-xs font-bold text-slate-800 mb-3 uppercase tracking-wider flex items-center">
+                                                            <span className="mr-1.5">{getNutrientIcon(nutrient.key, "w-3.5 h-3.5 text-sky-700")}</span>
                                                             {cleanLabel} ({nutrient.label.includes('ppb') ? 'ppb' : 'ppm'})
                                                         </h3>
                                                         <div className="flex-1 min-h-0">
                                                             <MonthlyTrendChart 
                                                                 data={chartData} 
                                                                 nutrient={cleanLabel} 
+                                                                color={nutrient.color}
                                                                 isCompact={true}
                                                                 showAxes={true}
+                                                                isPdfMode={true}
                                                             />
                                                         </div>
                                                     </div>
@@ -1137,6 +1243,7 @@ const App: React.FC = () => {
                                     </div>
                                 </div>
                             )}
+
                         </div>
                     </>
                 )}

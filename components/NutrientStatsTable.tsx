@@ -9,9 +9,10 @@ interface NutrientStatsTableProps {
     data: RawMaterialData[];
     material?: string;
     category?: 'nutrients' | 'mycotoxins';
+    isPdfMode?: boolean;
 }
 
-export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, material, category }) => {
+export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, material, category, isPdfMode = false }) => {
     
     const statsData = useMemo(() => {
         if (!data || data.length === 0) return [];
@@ -104,9 +105,26 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
         URL.revokeObjectURL(url);
     };
 
-    if (!statsData.length) return <div className="flex items-center justify-center h-full text-slate-400">No hay datos suficientes para calcular estadísticas.</div>;
+    if (!statsData.length) return (
+        <div className={`flex items-center justify-center h-full ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>
+            No hay datos suficientes para calcular estadísticas.
+        </div>
+    );
 
     const getStatusBadge = (status: string) => {
+        if (isPdfMode) {
+            switch (status) {
+                case 'normal':
+                    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300">Normal</span>;
+                case 'low':
+                    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-300">Bajo</span>;
+                case 'high':
+                    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-800 border border-rose-300">Alto</span>;
+                default:
+                    return <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-600 border border-slate-200">N/A</span>;
+            }
+        }
+
         switch (status) {
             case 'normal':
                 return <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-ui-success/20 text-ui-success">Normal</span>;
@@ -121,41 +139,43 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
 
     return (
         <div className="flex flex-col h-full">
-            <div className="flex justify-end mb-2">
-                 <button 
-                    onClick={handleDownloadCsv}
-                    className="flex items-center text-xs bg-ui-accent/10 text-ui-accent hover:bg-ui-accent/20 text-ui-accent py-1.5 px-3 rounded transition-colors border border-ui-accent/30"
-                    title="Descargar tabla en CSV"
-                >
-                    <DownloadIcon />
-                    <span className="ml-1 font-medium">Descargar CSV</span>
-                </button>
-            </div>
-            <div className="overflow-auto flex-1 border border-ui-border rounded-lg">
-                <table className="min-w-full divide-y divide-ui-border text-sm">
-                    <thead className="bg-ui-darkest sticky top-0 z-10 shadow-sm">
+            {!isPdfMode && (
+                <div className="flex justify-end mb-2">
+                    <button 
+                        onClick={handleDownloadCsv}
+                        className="flex items-center text-xs bg-ui-accent/10 text-ui-accent hover:bg-ui-accent/20 text-ui-accent py-1.5 px-3 rounded transition-colors border border-ui-accent/30"
+                        title="Descargar tabla en CSV"
+                    >
+                        <DownloadIcon />
+                        <span className="ml-1 font-medium">Descargar CSV</span>
+                    </button>
+                </div>
+            )}
+            <div className={`overflow-auto flex-1 border rounded-xl ${isPdfMode ? 'border-slate-200 shadow-sm bg-white' : 'border-ui-border'}`}>
+                <table className={`min-w-full text-sm ${isPdfMode ? 'divide-y divide-slate-200' : 'divide-y divide-ui-border'}`}>
+                    <thead className={`sticky top-0 z-10 shadow-sm ${isPdfMode ? 'bg-slate-100 border-b border-slate-300 text-slate-800' : 'bg-ui-darkest'}`}>
                         <tr>
-                            <th className="px-4 py-3 text-left font-semibold text-slate-400">Parámetro</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-400">Promedio</th>
-                            <th className="px-4 py-3 text-center font-semibold text-slate-400">Rango Ref.</th>
-                            <th className="px-4 py-3 text-center font-semibold text-slate-400">Estado</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-400">Mín</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-400">Max</th>
-                            <th className="px-4 py-3 text-right font-semibold text-slate-400">DE</th>
-                             <th className="px-4 py-3 text-right font-semibold text-slate-400">N</th>
+                            <th className={`px-4 py-3 text-left font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>Parámetro</th>
+                            <th className={`px-4 py-3 text-right font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>Promedio</th>
+                            <th className={`px-4 py-3 text-center font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>Rango Ref.</th>
+                            <th className={`px-4 py-3 text-center font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>Estado</th>
+                            <th className={`px-4 py-3 text-right font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>Mín</th>
+                            <th className={`px-4 py-3 text-right font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>Max</th>
+                            <th className={`px-4 py-3 text-right font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>DE</th>
+                            <th className={`px-4 py-3 text-right font-bold ${isPdfMode ? 'text-slate-800 uppercase tracking-wider text-xs' : 'text-slate-400'}`}>N</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-ui-border bg-ui-card">
+                    <tbody className={`${isPdfMode ? 'divide-y divide-slate-200 bg-white' : 'divide-y divide-ui-border bg-ui-card'}`}>
                         {statsData.map((row, idx) => (
-                            <tr key={idx} className="hover:bg-ui-darkest transition-colors">
-                                <td className="px-4 py-2 font-medium text-slate-300">{row!.label}</td>
-                                <td className="px-4 py-2 text-right font-semibold text-slate-100">{row!.mean}</td>
-                                <td className="px-4 py-2 text-center text-slate-400 text-xs">{row!.refRangeString}</td>
+                            <tr key={idx} className={`${isPdfMode ? 'hover:bg-slate-50 transition-colors even:bg-slate-50/60' : 'hover:bg-ui-darkest transition-colors'}`}>
+                                <td className={`px-4 py-2 font-bold ${isPdfMode ? 'text-slate-900' : 'text-slate-300'}`}>{row!.label}</td>
+                                <td className={`px-4 py-2 text-right font-black ${isPdfMode ? 'text-slate-900 font-mono text-base' : 'text-slate-100 font-semibold'}`}>{row!.mean}</td>
+                                <td className={`px-4 py-2 text-center text-xs font-mono font-medium ${isPdfMode ? 'text-slate-600' : 'text-slate-400'}`}>{row!.refRangeString}</td>
                                 <td className="px-4 py-2 text-center">{getStatusBadge(row!.status)}</td>
-                                <td className="px-4 py-2 text-right text-slate-400">{row!.min}</td>
-                                <td className="px-4 py-2 text-right text-slate-400">{row!.max}</td>
-                                <td className="px-4 py-2 text-right text-slate-400">{row!.stdDev}</td>
-                                <td className="px-4 py-2 text-right text-slate-400">{row!.count}</td>
+                                <td className={`px-4 py-2 text-right font-mono font-medium ${isPdfMode ? 'text-slate-600' : 'text-slate-400'}`}>{row!.min}</td>
+                                <td className={`px-4 py-2 text-right font-mono font-medium ${isPdfMode ? 'text-slate-600' : 'text-slate-400'}`}>{row!.max}</td>
+                                <td className={`px-4 py-2 text-right font-mono font-medium ${isPdfMode ? 'text-slate-600' : 'text-slate-400'}`}>{row!.stdDev}</td>
+                                <td className={`px-4 py-2 text-right font-mono font-bold ${isPdfMode ? 'text-slate-700' : 'text-slate-400'}`}>{row!.count}</td>
                             </tr>
                         ))}
                     </tbody>
@@ -163,4 +183,5 @@ export const NutrientStatsTable: React.FC<NutrientStatsTableProps> = ({ data, ma
             </div>
         </div>
     );
+
 }

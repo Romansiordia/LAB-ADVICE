@@ -1,12 +1,14 @@
 
 import React, { useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Brush, ReferenceLine } from 'recharts';
+import { getPrintContrastingColor } from '../constants';
 
 interface TrendChartProps {
     data: { date: string, value: number, noId?: string, lote?: string }[];
     nutrient: string;
     color?: string;
     isCompact?: boolean;
+    isPdfMode?: boolean;
 }
 
 const CustomTooltip = ({ active, payload, label }: any) => {
@@ -38,7 +40,7 @@ const CustomTooltip = ({ active, payload, label }: any) => {
     return null;
 };
 
-export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, isCompact = false }) => {
+export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, isCompact = false, isPdfMode = false }) => {
     const stats = useMemo(() => {
         if (!data || data.length === 0) return null;
         
@@ -54,8 +56,10 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, i
         };
     }, [data]);
 
+    const chartColor = getPrintContrastingColor(color || "#06b6d4", isPdfMode);
+
     if (!data || data.length === 0 || !stats) {
-        return <div className="flex items-center justify-center h-full text-slate-400">No hay datos disponibles para esta selección.</div>;
+        return <div className={`flex items-center justify-center h-full ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>No hay datos disponibles para esta selección.</div>;
     }
 
     const formatDate = (tickItem: string) => {
@@ -73,32 +77,47 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, i
                     bottom: 5,
                 }}
             >
-                {!isCompact && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />}
+                {!isCompact && (
+                    <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        stroke={isPdfMode ? "#e2e8f0" : "rgba(255,255,255,0.1)"} 
+                    />
+                )}
                 <XAxis 
                     dataKey="date" 
                     tickFormatter={formatDate} 
-                    stroke="#94a3b8" 
-                    fontSize={12} 
-                    fontWeight={500}
-                    tick={{ fill: '#cbd5e1' }}
+                    stroke={isPdfMode ? "#64748b" : "#94a3b8"} 
+                    fontSize={11} 
+                    fontWeight={isPdfMode ? 600 : 500}
+                    tick={{ fill: isPdfMode ? '#334155' : '#cbd5e1' }}
                     hide={isCompact} 
-                    axisLine={isCompact ? { stroke: '#94a3b8', strokeWidth: 1 } : true}
+                    axisLine={isCompact ? { stroke: isPdfMode ? '#cbd5e1' : '#94a3b8', strokeWidth: 1 } : true}
                 />
                 {/* We show the XAxis line even in compact mode to provide a baseline */}
-                {isCompact && <XAxis dataKey="date" hide={false} tick={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} height={1} />}
+                {isCompact && <XAxis dataKey="date" hide={false} tick={false} axisLine={{ stroke: isPdfMode ? '#cbd5e1' : '#94a3b8', strokeWidth: 1 }} height={1} />}
                 
                 <YAxis 
-                    stroke="#94a3b8" 
-                    fontSize={12} 
-                    fontWeight={500}
-                    tick={{ fill: '#cbd5e1' }}
+                    stroke={isPdfMode ? "#64748b" : "#94a3b8"} 
+                    fontSize={11} 
+                    fontWeight={isPdfMode ? 600 : 500}
+                    tick={{ fill: isPdfMode ? '#334155' : '#cbd5e1' }}
                     domain={['auto', 'auto']} 
                     hide={isCompact} 
                 />
                 
-                <Tooltip content={<CustomTooltip />} />
-                {!isCompact && <Legend verticalAlign="top" height={36} formatter={() => `Tendencia Diaria (${nutrient})`} />}
+                {!isPdfMode && <Tooltip content={<CustomTooltip />} />}
                 {!isCompact && (
+                    <Legend 
+                        verticalAlign="top" 
+                        height={36} 
+                        formatter={() => (
+                            <span className={isPdfMode ? "text-slate-800 font-bold text-xs" : "text-slate-200 text-xs"}>
+                                Tendencia Diaria ({nutrient})
+                            </span>
+                        )} 
+                    />
+                )}
+                {!isCompact && !isPdfMode && (
                     <Brush 
                         dataKey="date" 
                         height={30} 
@@ -108,21 +127,45 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, i
                     />
                 )}
                 
-                {!isCompact && <ReferenceLine y={stats.ucl} stroke="#f43f5e" strokeDasharray="3 3" opacity={0.5} label={{ position: 'insideTopRight', value: 'LCS', fill: '#f43f5e', fontSize: 10 }} />}
-                {!isCompact && <ReferenceLine y={stats.mean} stroke="#22c55e" strokeDasharray="3 3" opacity={0.5} label={{ position: 'insideTopRight', value: 'LC', fill: '#22c55e', fontSize: 10 }} />}
-                {!isCompact && <ReferenceLine y={stats.lcl} stroke="#f43f5e" strokeDasharray="3 3" opacity={0.5} label={{ position: 'insideBottomRight', value: 'LCI', fill: '#f43f5e', fontSize: 10 }} />}
+                {!isCompact && (
+                    <ReferenceLine 
+                        y={stats.ucl} 
+                        stroke={isPdfMode ? "#dc2626" : "#f43f5e"} 
+                        strokeDasharray="3 3" 
+                        opacity={isPdfMode ? 0.85 : 0.5} 
+                        label={{ position: 'insideTopRight', value: 'LCS', fill: isPdfMode ? '#dc2626' : '#f43f5e', fontSize: 10, fontWeight: 700 }} 
+                    />
+                )}
+                {!isCompact && (
+                    <ReferenceLine 
+                        y={stats.mean} 
+                        stroke={isPdfMode ? "#16a34a" : "#22c55e"} 
+                        strokeDasharray="3 3" 
+                        opacity={isPdfMode ? 0.85 : 0.5} 
+                        label={{ position: 'insideTopRight', value: 'LC', fill: isPdfMode ? '#16a34a' : '#22c55e', fontSize: 10, fontWeight: 700 }} 
+                    />
+                )}
+                {!isCompact && (
+                    <ReferenceLine 
+                        y={stats.lcl} 
+                        stroke={isPdfMode ? "#dc2626" : "#f43f5e"} 
+                        strokeDasharray="3 3" 
+                        opacity={isPdfMode ? 0.85 : 0.5} 
+                        label={{ position: 'insideBottomRight', value: 'LCI', fill: isPdfMode ? '#dc2626' : '#f43f5e', fontSize: 10, fontWeight: 700 }} 
+                    />
+                )}
 
-                {isCompact && <ReferenceLine y={stats.ucl} stroke="#f43f5e" strokeDasharray="2 2" opacity={0.3} />}
-                {isCompact && <ReferenceLine y={stats.mean} stroke="#22c55e" strokeDasharray="2 2" opacity={0.3} />}
-                {isCompact && <ReferenceLine y={stats.lcl} stroke="#f43f5e" strokeDasharray="2 2" opacity={0.3} />}
+                {isCompact && <ReferenceLine y={stats.ucl} stroke={isPdfMode ? "#dc2626" : "#f43f5e"} strokeDasharray="2 2" opacity={0.4} />}
+                {isCompact && <ReferenceLine y={stats.mean} stroke={isPdfMode ? "#16a34a" : "#22c55e"} strokeDasharray="2 2" opacity={0.4} />}
+                {isCompact && <ReferenceLine y={stats.lcl} stroke={isPdfMode ? "#dc2626" : "#f43f5e"} strokeDasharray="2 2" opacity={0.4} />}
 
                 <Line isAnimationActive={false} 
                     type="monotone" 
                     dataKey="value" 
                     name={nutrient} 
-                    stroke={color || "#06b6d4"} 
-                    strokeWidth={isCompact ? 3 : 2} 
-                    dot={isCompact ? false : { r: 2 }} 
+                    stroke={chartColor} 
+                    strokeWidth={isCompact ? 3 : (isPdfMode ? 2.5 : 2)} 
+                    dot={isCompact ? false : { r: isPdfMode ? 3 : 2, fill: chartColor }} 
                     activeDot={{ r: 6 }} 
                     connectNulls
                     animationDuration={1000}
@@ -131,3 +174,4 @@ export const TrendChart: React.FC<TrendChartProps> = ({ data, nutrient, color, i
         </ResponsiveContainer>
     );
 };
+

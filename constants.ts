@@ -77,3 +77,26 @@ export const SPECIES_LABELS = [
     { key: 'hen', label: 'Gallina Ponedora (Hen)' },
     { key: 'pigs', label: 'Cerdos / Porcinos (Pigs)' }
 ];
+
+export const getPrintContrastingColor = (hexColor: string, isPdfMode: boolean = false): string => {
+    if (!isPdfMode || !hexColor) return hexColor;
+    
+    const lightToDarkMap: Record<string, string> = {
+        '#06b6d4': '#0284c7', // Cyan -> Deep Sky Blue
+        '#84cc16': '#4d7c0f', // Lime -> Deep Forest Lime
+        '#eab308': '#b45309', // Yellow/Xantofilas -> Deep Golden Amber
+        '#f59e0b': '#d97706', // Amber -> Rich Warm Amber
+        '#10b981': '#047857', // Emerald -> Deep Emerald
+        '#14b8a6': '#0f766e', // Teal -> Deep Teal
+        '#3b82f6': '#1d4ed8', // Blue -> Royal Blue
+        '#8b5cf6': '#6d28d9', // Violet -> Deep Violet
+        '#a855f7': '#7e22ce', // Purple -> Deep Purple
+        '#ec4899': '#be185d', // Pink -> Deep Pink
+        '#f43f5e': '#be123c', // Rose -> Crimson Rose
+        '#f97316': '#c2410c', // Orange -> Deep Burnt Orange
+        '#64748b': '#334155', // Slate -> Dark Slate
+        '#ef4444': '#b91c1c'  // Red -> Dark Red
+    };
+
+    return lightToDarkMap[hexColor.toLowerCase()] || hexColor;
+};

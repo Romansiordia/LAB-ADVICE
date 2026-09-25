@@ -7,9 +7,10 @@ interface SupplierAnalysisProps {
     data: RawMaterialData[];
     material: string;
     category?: 'nutrients' | 'mycotoxins';
+    isPdfMode?: boolean;
 }
 
-export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, material, category }) => {
+export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, material, category, isPdfMode = false }) => {
     
     // Group data by supplier
     const suppliersData = useMemo(() => {
@@ -104,7 +105,9 @@ export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, materi
 
     if (!suppliersData) {
         return (
-            <div className="bg-ui-card border border-ui-border rounded-2xl p-6 text-center text-slate-400">
+            <div className={`border rounded-2xl p-6 text-center ${
+                isPdfMode ? 'bg-white border-slate-200 text-slate-500' : 'bg-ui-card border-ui-border text-slate-400'
+            }`}>
                 No hay datos de proveedores suficientes para el análisis.
             </div>
         );
@@ -112,63 +115,91 @@ export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, materi
 
     return (
         <div className="space-y-6">
-            <h2 className="text-xl font-bold text-slate-100 mb-4 px-1">Control de Calidad de Proveedores</h2>
+            <h2 className={`text-xl font-bold mb-4 px-1 ${
+                isPdfMode ? 'text-slate-900' : 'text-slate-100'
+            }`}>
+                Control de Calidad de Proveedores
+            </h2>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {suppliersData.map(supplier => (
-                    <div key={supplier.name} className="bg-ui-card border border-ui-border rounded-2xl shadow-sm overflow-hidden flex flex-col">
-                        <div className="bg-ui-darkest border-b border-ui-border px-6 py-4">
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-lg font-semibold text-slate-100">{supplier.name}</h3>
-                                <span className="text-xs font-medium bg-slate-200 text-slate-300 px-2 py-1 rounded-full">
-                                    {supplier.samples} muestras
-                                </span>
-                            </div>
+                    <div key={supplier.name} className={`border rounded-2xl shadow-sm overflow-hidden flex flex-col ${
+                        isPdfMode ? 'bg-white border-slate-200 text-slate-800' : 'bg-ui-card border-ui-border'
+                    }`}>
+                        <div className={`px-6 py-4 border-b flex justify-between items-center ${
+                            isPdfMode ? 'bg-slate-100 border-slate-200' : 'bg-ui-darkest border-ui-border'
+                        }`}>
+                            <h3 className={`text-lg font-bold ${
+                                isPdfMode ? 'text-slate-900' : 'text-slate-100'
+                            }`}>
+                                {supplier.name}
+                            </h3>
+                            <span className={`text-xs font-bold px-2.5 py-1 rounded-full border ${
+                                isPdfMode ? 'bg-white border-slate-300 text-slate-700' : 'bg-slate-200 text-slate-300'
+                            }`}>
+                                {supplier.samples} muestras
+                            </span>
                         </div>
                         <div className="p-6 flex-1 space-y-6">
                             
                             {/* Rejections */}
                             <div>
-                                <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Tasa de Rechazos (Fuera de LCI/LCS)</h4>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-3 ${
+                                    isPdfMode ? 'text-slate-600' : 'text-slate-400'
+                                }`}>
+                                    Tasa de Rechazos (Fuera de LCI/LCS)
+                                </h4>
                                 {Object.keys(supplier.rejections).length > 0 ? (
                                     <div className="space-y-2">
                                         {Object.entries(supplier.rejections).map(([nutrient, countValue]) => {
-                                            const count = countValue as number;
-                                            const bgPercent = supplier.samples > 0 ? (count / supplier.samples) * 100 : 0;
-                                            return (
-                                                <div key={`rej-${nutrient}`} className="relative">
-                                                    <div className="flex justify-between text-sm mb-1">
-                                                        <span className="font-medium text-slate-300">{nutrient.replace(' (%)', '')}</span>
-                                                        <span className={`${count > 0 ? 'text-red-400 font-bold' : 'text-slate-400'}`}>
-                                                            {count} ({bgPercent.toFixed(1)}%)
-                                                        </span>
-                                                    </div>
-                                                    <div className="w-full bg-ui-dark rounded-full h-1.5">
-                                                        <div 
-                                                            className={`h-1.5 rounded-full ${count > 0 ? 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]/200' : 'bg-slate-300'}`} 
-                                                            style={{ width: `${Math.min(bgPercent, 100)}%` }}
-                                                        ></div>
-                                                    </div>
-                                                </div>
-                                            );
+                                             const count = countValue as number;
+                                             const bgPercent = supplier.samples > 0 ? (count / supplier.samples) * 100 : 0;
+                                             return (
+                                                 <div key={`rej-${nutrient}`} className="relative">
+                                                     <div className="flex justify-between text-sm mb-1">
+                                                         <span className={`font-semibold ${isPdfMode ? 'text-slate-800' : 'text-slate-300'}`}>{nutrient.replace(' (%)', '')}</span>
+                                                         <span className={`${count > 0 ? (isPdfMode ? 'text-rose-700 font-bold' : 'text-red-400 font-bold') : (isPdfMode ? 'text-slate-500' : 'text-slate-400')}`}>
+                                                             {count} ({bgPercent.toFixed(1)}%)
+                                                         </span>
+                                                     </div>
+                                                     <div className={`w-full rounded-full h-2 ${isPdfMode ? 'bg-slate-200' : 'bg-ui-dark'}`}>
+                                                         <div 
+                                                             className={`h-2 rounded-full ${count > 0 ? (isPdfMode ? 'bg-rose-600' : 'bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]/200') : (isPdfMode ? 'bg-slate-300' : 'bg-slate-300')}`} 
+                                                             style={{ width: `${Math.min(bgPercent, 100)}%` }}
+                                                         ></div>
+                                                     </div>
+                                                 </div>
+                                             );
                                         })}
                                     </div>
                                 ) : (
-                                    <span className="text-sm text-slate-400">Sin datos</span>
+                                    <span className={`text-sm ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>Sin datos</span>
                                 )}
                             </div>
 
                             {/* Reliability */}
                             <div>
-                                <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">Índice de Confiabilidad (Desviación Estándar)</h4>
-                                <p className="text-xs text-slate-400 mb-3">Valores menores indican mayor consistencia (menor varianza) en las entregas.</p>
+                                <h4 className={`text-xs font-bold uppercase tracking-wider mb-2 ${
+                                    isPdfMode ? 'text-slate-600' : 'text-slate-400'
+                                }`}>
+                                    Índice de Confiabilidad (Desviación Estándar)
+                                </h4>
+                                <p className={`text-xs mb-3 ${isPdfMode ? 'text-slate-500 font-medium' : 'text-slate-400'}`}>
+                                    Valores menores indican mayor consistencia (menor varianza) en las entregas.
+                                </p>
                                 <div className="grid grid-cols-2 gap-3">
                                     {Object.entries(supplier.variances).map(([nutrient, stdDevValue]) => {
                                         const stdDev = stdDevValue as number;
                                         return (
-                                        <div key={`var-${nutrient}`} className="bg-ui-darkest rounded-lg p-3 border border-ui-border flex justify-between items-center">
-                                            <span className="text-xs font-medium text-slate-400 truncate mr-2" title={nutrient}>{nutrient.replace(' (%)', '')}</span>
-                                            <span className="text-sm font-bold text-slate-100">{stdDev.toFixed(3)}</span>
+                                        <div key={`var-${nutrient}`} className={`rounded-lg p-3 border flex justify-between items-center ${
+                                            isPdfMode ? 'bg-slate-50 border-slate-200 shadow-sm' : 'bg-ui-darkest border-ui-border'
+                                        }`}>
+                                            <span className={`text-xs font-semibold truncate mr-2 ${isPdfMode ? 'text-slate-600' : 'text-slate-400'}`} title={nutrient}>
+                                                {nutrient.replace(' (%)', '')}
+                                            </span>
+                                            <span className={`text-sm font-black font-mono ${isPdfMode ? 'text-slate-900' : 'text-slate-100'}`}>
+                                                {stdDev.toFixed(3)}
+                                            </span>
                                         </div>
                                     )})}
                                 </div>
@@ -176,14 +207,16 @@ export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, materi
                             
                             {/* Nelson Alerts */}
                             {supplier.alerts.length > 0 && (
-                                <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 mt-auto">
-                                    <div className="flex items-center space-x-2 text-orange-800 font-semibold mb-2">
-                                        <AlertTriangleIcon className="w-4 h-4" />
+                                <div className={`border rounded-xl p-4 mt-auto ${
+                                    isPdfMode ? 'bg-amber-50 border-amber-200 text-amber-900' : 'bg-orange-50 border border-orange-100 text-orange-800'
+                                }`}>
+                                    <div className="flex items-center space-x-2 font-bold mb-2">
+                                        <AlertTriangleIcon className="w-4 h-4 text-amber-600" />
                                         <span className="text-sm">Alertas de Tendencia (Reglas de Nelson)</span>
                                     </div>
                                     <ul className="space-y-1">
                                         {supplier.alerts.map((alert, idx) => (
-                                            <li key={idx} className="text-xs text-orange-700 flex items-start">
+                                            <li key={idx} className={`text-xs flex items-start font-medium ${isPdfMode ? 'text-amber-800' : 'text-orange-700'}`}>
                                                 <span className="mr-2 mt-0.5">•</span>
                                                 <span>{alert}</span>
                                             </li>
@@ -198,4 +231,5 @@ export const SupplierAnalysis: React.FC<SupplierAnalysisProps> = ({ data, materi
             </div>
         </div>
     );
+
 };

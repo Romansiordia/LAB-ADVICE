@@ -2,12 +2,14 @@
 import React, { useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { HistogramBin } from '../types';
+import { getPrintContrastingColor } from '../constants';
 
 interface HistogramChartProps {
     data: { date: string, value: number }[];
     nutrient: string;
     color?: string;
     isCompact?: boolean;
+    isPdfMode?: boolean;
 }
 
 const createHistogramData = (data: { value: number }[], numBins = 10): HistogramBin[] => {
@@ -45,12 +47,13 @@ const createHistogramData = (data: { value: number }[], numBins = 10): Histogram
     return bins;
 };
 
-export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, color, isCompact = false }) => {
+export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, color, isCompact = false, isPdfMode = false }) => {
 
     const histogramData = useMemo(() => createHistogramData(data, isCompact ? 8 : 12), [data, isCompact]);
+    const barFillColor = getPrintContrastingColor(color || "#10b981", isPdfMode);
 
     if (!data || data.length === 0) {
-        return <div className="flex items-center justify-center h-full text-slate-400">No hay datos disponibles para esta selección.</div>;
+        return <div className={`flex items-center justify-center h-full ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>No hay datos disponibles para esta selección.</div>;
     }
     
     return (
@@ -64,45 +67,61 @@ export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, 
                     bottom: 5,
                 }}
             >
-                {!isCompact && <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />}
+                {!isCompact && (
+                    <CartesianGrid 
+                        strokeDasharray="3 3" 
+                        stroke={isPdfMode ? "#e2e8f0" : "rgba(255,255,255,0.1)"} 
+                    />
+                )}
                 <XAxis 
                     dataKey="range" 
-                    stroke="#94a3b8" 
+                    stroke={isPdfMode ? "#64748b" : "#94a3b8"} 
                     fontSize={10} 
-                    fontWeight={500}
-                    tick={{ fill: '#cbd5e1' }}
+                    fontWeight={isPdfMode ? 600 : 500}
+                    tick={{ fill: isPdfMode ? '#334155' : '#cbd5e1' }}
                     angle={-30} 
                     textAnchor="end" 
                     height={50} 
                     hide={isCompact}
                 />
-                {isCompact && <XAxis dataKey="range" hide={false} tick={false} axisLine={{ stroke: '#94a3b8', strokeWidth: 1 }} height={1} />}
+                {isCompact && <XAxis dataKey="range" hide={false} tick={false} axisLine={{ stroke: isPdfMode ? '#cbd5e1' : '#94a3b8', strokeWidth: 1 }} height={1} />}
                 
                 <YAxis 
                     allowDecimals={false} 
-                    stroke="#94a3b8" 
-                    fontSize={12} 
-                    fontWeight={500}
-                    tick={{ fill: '#cbd5e1' }}
+                    stroke={isPdfMode ? "#64748b" : "#94a3b8"} 
+                    fontSize={11} 
+                    fontWeight={isPdfMode ? 600 : 500}
+                    tick={{ fill: isPdfMode ? '#334155' : '#cbd5e1' }}
                     hide={isCompact}
                 />
                 
-                <Tooltip 
-                    contentStyle={{ 
-                        backgroundColor: '#132641', 
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
-                        borderRadius: '8px',
-                        fontSize: '12px'
-                    }} 
-                    labelStyle={{ color: '#f1f5f9', fontWeight: 'bold' }}
-                    cursor={{ fill: '#f1f5f9' }}
-                />
-                {!isCompact && <Legend />}
+                {!isPdfMode && (
+                    <Tooltip 
+                        contentStyle={{ 
+                            backgroundColor: '#132641', 
+                            border: '1px solid rgba(255,255,255,0.1)',
+                            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+                            borderRadius: '8px',
+                            fontSize: '12px'
+                        }} 
+                        labelStyle={{ color: '#f1f5f9', fontWeight: 'bold' }}
+                        cursor={{ fill: '#f1f5f9' }}
+                    />
+                )}
+                {!isCompact && (
+                    <Legend 
+                        formatter={() => (
+                            <span className={isPdfMode ? "text-slate-800 font-bold text-xs" : "text-slate-200 text-xs"}>
+                                Frecuencia
+                            </span>
+                        )} 
+                    />
+                )}
                 <Bar isAnimationActive={false} 
                     dataKey="count" 
                     name="Frecuencia" 
-                    fill={color || "#10b981"} 
+                    fill={barFillColor} 
+                    stroke={isPdfMode ? barFillColor : undefined}
                     radius={[4, 4, 0, 0]} 
                     animationDuration={1000}
                 />
@@ -110,3 +129,4 @@ export const HistogramChart: React.FC<HistogramChartProps> = ({ data, nutrient, 
         </ResponsiveContainer>
     );
 };
+
