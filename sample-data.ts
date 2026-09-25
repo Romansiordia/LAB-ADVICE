@@ -81,6 +81,11 @@ const generateData = (): RawMaterialData[] => {
                 fibra: parseFloat((baseFibra + (Math.random() - 0.5)).toFixed(2)),
                 ceniza: parseFloat((5 + Math.random()).toFixed(2)),
                 almidon: material === 'Maiz' ? parseFloat((65 + (Math.random() - 0.5) * 5).toFixed(2)) : undefined,
+                xantofilas: material === 'Maiz' 
+                    ? parseFloat((19.5 + (Math.random() - 0.5) * 4).toFixed(2)) 
+                    : material === 'DDGS' 
+                    ? parseFloat((32.0 + (Math.random() - 0.5) * 6).toFixed(2)) 
+                    : undefined,
                 aflatoxina: parseFloat((Math.random() * 8 + 1).toFixed(2)),
                 ocratoxina: parseFloat((Math.random() * 4 + 0.5).toFixed(2)),
                 zearalenona: parseFloat((Math.random() * 80 + 20).toFixed(2)),

@@ -30,6 +30,7 @@ import { DownloadIcon } from './components/icons/DownloadIcon';
 import { ShieldCheckIcon } from './components/icons/ShieldCheckIcon';
 import { SupplierAnalysis } from './components/SupplierAnalysis';
 import { ClientComparison } from './components/ClientComparison';
+import { PcaAnalysisView } from './components/PcaAnalysisView';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { parseFlexibleDate, detectDateFormat } from './dateParser';
@@ -48,7 +49,7 @@ declare const Papa: any;
 declare const XLSX: any;
 
 const ALL_FILTER = 'Todos';
-type ViewMode = 'general' | 'histograms' | 'monthly_trends' | 'statistics' | 'supplier_quality';
+type ViewMode = 'general' | 'histograms' | 'monthly_trends' | 'statistics' | 'supplier_quality' | 'pca';
 type ZoomType = 'daily' | 'histogram' | 'monthly';
 
 interface ZoomConfig {
@@ -139,7 +140,8 @@ const App: React.FC = () => {
                 const pdf = new jsPDF('p', 'mm', [pdfWidth, pdfHeight]);
                 pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
                 
-                pdf.save(`Reporte_Calidad_${selectedMaterial}_${new Date().toISOString().split('T')[0]}.pdf`);
+                const reportPrefix = currentView === 'pca' ? 'Analisis_PCA' : 'Calidad';
+                pdf.save(`Reporte_${reportPrefix}_${selectedMaterial}_${new Date().toISOString().split('T')[0]}.pdf`);
             }
         } catch (error) {
             console.error('Error al generar PDF:', error);
@@ -677,7 +679,8 @@ const App: React.FC = () => {
                                         { id: 'monthly_trends', label: 'Tendencias Mensuales' },
                                         { id: 'histograms', label: 'Distribución' },
                                         { id: 'statistics', label: 'Estadísticas' },
-                                        { id: 'supplier_quality', label: 'Proveedores' }
+                                        { id: 'supplier_quality', label: 'Proveedores' },
+                                        { id: 'pca', label: 'Análisis PCA' }
                                     ].map((tab) => (
                                         <button
                                             key={tab.id}
@@ -867,7 +870,7 @@ const App: React.FC = () => {
                             )}
 
 
-                            {(isGeneratingPdf || ['general', 'histograms', 'monthly_trends'].includes(currentView)) && (
+                            {((isGeneratingPdf && currentView !== 'pca') || ['general', 'histograms', 'monthly_trends'].includes(currentView)) && (
                                 <div className="space-y-8">
                                     {!isGeneratingPdf && (
                                         <div className="flex bg-ui-card shrink-0 p-1 rounded-xl border border-ui-border max-w-sm sm:max-w-md">
@@ -1142,7 +1145,7 @@ const App: React.FC = () => {
                                 </div>
                             )}
                             
-                            {(isGeneratingPdf || currentView === 'statistics') && (
+                            {((isGeneratingPdf && currentView !== 'pca') || currentView === 'statistics') && (
                                 <div className="animate-fade-in mt-8 space-y-8">
                                     <div>
                                         <h2 className={`text-xl font-bold mb-6 px-1 flex items-center ${isEffectiveWhiteTheme ? 'text-slate-900' : 'text-slate-100'}`}>
@@ -1164,13 +1167,23 @@ const App: React.FC = () => {
                                 </div>
                             )}
 
-                            {(isGeneratingPdf || currentView === 'supplier_quality') && (
+                            {((isGeneratingPdf && currentView !== 'pca') || currentView === 'supplier_quality') && (
                                 <div className="animate-fade-in mt-8">
                                     <SupplierAnalysis data={multiTrendData} material={selectedMaterial} category={selectedCategory} isPdfMode={isEffectiveWhiteTheme} />
                                 </div>
                             )}
 
-                            {isGeneratingPdf && (
+                            {currentView === 'pca' && (
+                                <div className="animate-fade-in mt-8">
+                                    <PcaAnalysisView 
+                                        data={multiTrendData} 
+                                        selectedMaterial={selectedMaterial} 
+                                        isPdfMode={isEffectiveWhiteTheme} 
+                                    />
+                                </div>
+                            )}
+
+                            {(isGeneratingPdf && currentView !== 'pca') && (
                                 <div className="mt-8 space-y-8">
                                     <div className="border-t border-slate-200 pt-8">
                                         <h2 className="text-xl font-black text-slate-900 mb-2 px-1 flex items-center">
