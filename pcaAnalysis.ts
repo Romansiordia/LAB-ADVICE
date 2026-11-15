@@ -1,7 +1,7 @@
 /**
  * Utilidades matemáticas y estadísticas para Análisis de Componentes Principales (PCA),
  * descomposición espectral (Jacobi), agrupación por Origen/Cliente/Proveedor/Fechas
- * y generación automática de conclusiones en lenguaje claro para toma de decisiones.
+ * y clustering automático (K-means) de perfiles de calidad para nutriólogos y laboratoristas.
  */
 
 import { RawMaterialData } from './types';
@@ -12,6 +12,9 @@ export type PcaGroupField =
     | 'Origen'
     | 'Cliente'
     | 'Proveedor'
+    | 'kmeans_2'
+    | 'kmeans_3'
+    | 'kmeans_4'
     | 'quarter'
     | 'month'
     | 'year'
@@ -149,7 +152,6 @@ export interface PcaResult {
     };
 }
 
-// Paleta de colores distintivos y accesibles para grupos
 export const GROUP_PALETTE = [
     '#0284c7', // Sky Blue
     '#10b981', // Emerald
@@ -266,6 +268,78 @@ function jacobiEigenvalues(matrix: number[][], maxIter = 120, tolerance = 1e-10)
     };
 }
 
+/**
+ * Algoritmo K-means clásico (Lloyd's) para clustering automático de perfiles nutricionales.
+ */
+function runKMeans(vectors: number[][], k: number, maxIter = 25): number[] {
+    const N = vectors.length;
+    const P = vectors[0].length;
+    if (N <= k) return vectors.map((_, i) => i % k);
+
+    // Inicialización de centroides (K-means++ seed)
+    const centroids: number[][] = [];
+    centroids.push([...vectors[0]]);
+
+    for (let c = 1; c < k; c++) {
+        let bestIdx = 0;
+        let maxDist = -1;
+        for (let i = 0; i < N; i++) {
+            let minDist = Infinity;
+            for (const cent of centroids) {
+                let dist = 0;
+                for (let d = 0; d < P; d++) dist += Math.pow(vectors[i][d] - cent[d], 2);
+                if (dist < minDist) minDist = dist;
+            }
+            if (minDist > maxDist) {
+                maxDist = minDist;
+                bestIdx = i;
+            }
+        }
+        centroids.push([...vectors[bestIdx]]);
+    }
+
+    let assignments = new Array(N).fill(0);
+
+    for (let iter = 0; iter < maxIter; iter++) {
+        let changed = false;
+        for (let i = 0; i < N; i++) {
+            let bestCluster = 0;
+            let minDist = Infinity;
+            for (let c = 0; c < k; c++) {
+                let dist = 0;
+                for (let d = 0; d < P; d++) dist += Math.pow(vectors[i][d] - centroids[c][d], 2);
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestCluster = c;
+                }
+            }
+            if (assignments[i] !== bestCluster) {
+                assignments[i] = bestCluster;
+                changed = true;
+            }
+        }
+
+        if (!changed && iter > 0) break;
+
+        const sums = Array.from({ length: k }, () => Array(P).fill(0));
+        const counts = Array(k).fill(0);
+
+        for (let i = 0; i < N; i++) {
+            const cl = assignments[i];
+            counts[cl]++;
+            for (let d = 0; d < P; d++) sums[cl][d] += vectors[i][d];
+        }
+
+        for (let c = 0; c < k; c++) {
+            if (counts[c] > 0) {
+                for (let d = 0; d < P; d++) centroids[c][d] = sums[c][d] / counts[c];
+            }
+        }
+    }
+
+    return assignments;
+}
+
 function emptyInvalidResult(
     errorMessage: string,
     groupField: PcaGroupField,
@@ -296,7 +370,7 @@ function emptyInvalidResult(
         },
         decisionSummary: {
             separationLevel: 'Único Grupo',
-            separationTitle: 'Datos insuficientes para calcular PCA',
+            separationTitle: 'Datos insuficientes para calcular el mapa',
             mainFinding: errorMessage,
             stabilityFinding: '',
             nutrientFinding: '',
@@ -313,7 +387,7 @@ function emptyInvalidResult(
 }
 
 /**
- * Ejecuta el Análisis de Componentes Principales (PCA) y genera resúmenes entendibles.
+ * Ejecuta el Análisis PCA y agrupamiento K-means para nutriólogos y laboratoristas.
  */
 export function calculatePca(
     data: RawMaterialData[],
@@ -339,7 +413,6 @@ export function calculatePca(
         );
     }
 
-    // Extraer estadísticas globales válidas (ignorando ceros/vacíos que representan análisis no realizados)
     const validVariables: PcaVariableConfig[] = [];
 
     candidateConfigs.forEach(config => {
@@ -379,7 +452,6 @@ export function calculatePca(
 
     const P = validVariables.length;
 
-    // Determinar fechas válidas para calcular punto medio (útil para "Antes vs Después")
     const parsedDates = data
         .map(d => parseFlexibleDate(d.date))
         .filter((dt): dt is Date => dt !== null && !isNaN(dt.getTime()))
@@ -525,6 +597,48 @@ export function calculatePca(
         );
     }
 
+    // Si el usuario seleccionó K-means (kmeans_2, kmeans_3, kmeans_4), aplicamos clustering automático sobre zRow
+    if (groupField.startsWith('kmeans_')) {
+        const k = parseInt(groupField.split('_')[1], 10) || 3;
+        const vectors = rowsWithData.map(r => r.zRow);
+        const clusterAssignments = runKMeans(vectors, Math.min(k, N));
+
+        // Asignar nombres limpios y profesionales basados en el centroide promedio (suma de Z-scores)
+        const clusterSums = Array.from({ length: k }, () => 0);
+        const clusterCounts = Array(k).fill(0);
+        clusterAssignments.forEach((cl, idx) => {
+            clusterCounts[cl]++;
+            const sumZ = vectors[idx].reduce((a, b) => a + b, 0);
+            clusterSums[cl] += sumZ;
+        });
+
+        const clusterAverages = clusterSums.map((sum, idx) => (clusterCounts[idx] > 0 ? sum / clusterCounts[idx] : -999));
+        
+        // Ordenar clusters de mayor a menor calidad/concentración global
+        const sortedClusterIndices = clusterAverages
+            .map((avg, idx) => ({ avg, idx }))
+            .sort((a, b) => b.avg - a.avg)
+            .map(x => x.idx);
+
+        const rankMap = new Map<number, number>();
+        sortedClusterIndices.forEach((origIdx, newRank) => {
+            rankMap.set(origIdx, newRank);
+        });
+
+        const profileNamesK2 = ['Perfil A: Alta Concentración', 'Perfil B: Calidad Estándar / Baja'];
+        const profileNamesK3 = ['Perfil 1: Alta Concentración', 'Perfil 2: Calidad Estándar', 'Perfil 3: Concentración Reducida'];
+        const profileNamesK4 = ['Perfil I: Premium / Alto', 'Perfil II: Estándar Alto', 'Perfil III: Estándar Bajo', 'Perfil IV: Mínimo / Variable'];
+
+        rowsWithData.forEach((r, idx) => {
+            const rawCl = clusterAssignments[idx];
+            const rank = rankMap.get(rawCl) ?? 0;
+            if (k === 2) r.group = profileNamesK2[rank] || `Perfil ${rank + 1}`;
+            else if (k === 3) r.group = profileNamesK3[rank] || `Perfil ${rank + 1}`;
+            else r.group = profileNamesK4[rank] || `Perfil ${rank + 1}`;
+            r.groupSortKey = String(rank);
+        });
+    }
+
     // Matriz de Correlación R (P x P)
     const R: number[][] = Array.from({ length: P }, () => Array(P).fill(0));
     for (let j = 0; j < P; j++) {
@@ -603,11 +717,10 @@ export function calculatePca(
         };
     });
 
-    // Etiquetas humanas para los 4 extremos del mapa
     const topPc1Pos = loadings.filter(l => l.pc1Loading > 0.28).sort((a, b) => b.pc1Loading - a.pc1Loading).slice(0, 2).map(l => l.label);
     const topPc1Neg = loadings.filter(l => l.pc1Loading < -0.28).sort((a, b) => a.pc1Loading - b.pc1Loading).slice(0, 2).map(l => l.label);
     const topPc2Pos = loadings.filter(l => l.pc2Loading > 0.25).sort((a, b) => b.pc2Loading - a.pc2Loading).slice(0, 2).map(l => l.label);
-    const topPc2Neg = loadings.filter(l => l.pc2Loading < -0.25).sort((a, b) => a.pc2Loading - b.pc2Loading).slice(0, 2).map(l => l.label);
+    const topPc2Neg = loadings.filter(l => l.pc2Loading < -0.25).sort((a, b) => b.pc2Loading - a.pc2Loading).slice(0, 2).map(l => l.label);
 
     const axisLabels: PcaAxisLabels = {
         pc1Positive: topPc1Pos.length > 0 ? `Mayor ${topPc1Pos.join(' y ')}` : 'Eje 1 Positivo',
@@ -616,7 +729,6 @@ export function calculatePca(
         pc2Negative: topPc2Neg.length > 0 ? `Mayor ${topPc2Neg.join(' y ')}` : 'Valores bajos de ' + (topPc2Pos[0] || 'Eje 2')
     };
 
-    // Scores por muestra
     let maxAbsScore1 = 0;
     let maxAbsScore2 = 0;
 
@@ -658,7 +770,6 @@ export function calculatePca(
         };
     });
 
-    // Ordenar grupos de manera lógica (cronológica si es fecha, por cantidad de muestras si es categoría)
     const isTemporalField = ['month', 'quarter', 'year', 'period_split'].includes(groupField);
     const groupSortKeys = new Map<string, string>();
     const groupCounts = new Map<string, number>();
@@ -671,6 +782,9 @@ export function calculatePca(
     const uniqueGroups = Array.from(groupCounts.keys()).sort((a, b) => {
         if (isTemporalField) {
             return (groupSortKeys.get(a) || '').localeCompare(groupSortKeys.get(b) || '');
+        }
+        if (groupField.startsWith('kmeans_')) {
+            return a.localeCompare(b);
         }
         return (groupCounts.get(b) || 0) - (groupCounts.get(a) || 0);
     });
@@ -695,14 +809,12 @@ export function calculatePca(
         const distsScaled = gSamples.map(s =>
             Math.sqrt(Math.pow(s.pc1Scaled - meanPc1Scaled, 2) + Math.pow(s.pc2Scaled - meanPc2Scaled, 2))
         );
-        // Radio visual representativo (promedio + 0.5*std para envolver la mayoría del grupo)
         const meanDistScaled = distsScaled.reduce((a, b) => a + b, 0) / Math.max(1, distsScaled.length);
         const radiusScaled = Math.max(0.08, Math.min(0.55, meanDistScaled * 1.25));
 
         const stabilityLabel: PcaGroupCluster['stabilityLabel'] =
             radius < 0.9 ? 'Muy Estable' : radius < 1.6 ? 'Estabilidad Moderada' : 'Alta Variabilidad';
 
-        // Calcular promedios reales por nutriente para este grupo
         const variableStats: Record<string, PcaGroupVariableStat> = {};
         const higherList: { label: string; diffPct: number }[] = [];
         const lowerList: { label: string; diffPct: number }[] = [];
@@ -724,7 +836,6 @@ export function calculatePca(
                     diffVsGlobalPct: parseFloat(diffPct.toFixed(1))
                 };
 
-                // Destacar diferencias significativas (>3% respecto al promedio general o >0.35 desv. estándar)
                 const zDiff = v.stdDev > 0 ? Math.abs(diffAbs) / v.stdDev : 0;
                 if (zDiff >= 0.35 || Math.abs(diffPct) >= 4) {
                     const sign = diffPct > 0 ? '+' : '';
@@ -774,19 +885,17 @@ export function calculatePca(
         };
     });
 
-    // Evaluación de separación entre grupos y generación de conclusiones accionables
     let separationLevel: PcaDecisionSummary['separationLevel'] = 'Único Grupo';
-    let separationTitle = 'Análisis de un solo grupo (sin comparación entre segmentos)';
-    let mainFinding = `Todas las ${N} muestras pertenecen a "${groups[0]?.groupName}". Cambia el criterio superior (ej. Origen, Cliente o Trimestre) para comparar segmentos.`;
+    let separationTitle = 'Análisis de un solo grupo';
+    let mainFinding = `Todas las ${N} muestras pertenecen a "${groups[0]?.groupName}". Cambia el criterio superior para comparar segmentos.`;
     let stabilityFinding = groups[0]
-        ? `Dispersión interna del grupo: ${groups[0].stabilityLabel} (índice σ = ${groups[0].radius}).`
+        ? `Dispersión interna: ${groups[0].stabilityLabel} (σ = ${groups[0].radius}).`
         : '';
-    let recommendation = 'Usa "Antes vs Después" o "Trimestre" para evaluar si la calidad cambió en el tiempo.';
+    let recommendation = 'Usa K-means o compara por Origen para identificar perfiles.';
 
     const groupInsights: string[] = [];
 
     if (groups.length > 1) {
-        // Encontrar el par de grupos con mayor distancia entre centroides
         let maxDist = -1;
         let gA = groups[0];
         let gB = groups[1];
@@ -804,22 +913,20 @@ export function calculatePca(
             }
         }
 
-        // Medir separación relativa respecto a la dispersión interna media
         const avgRadius = groups.reduce((acc, g) => acc + g.radius, 0) / groups.length;
         const separationRatio = avgRadius > 0.05 ? maxDist / avgRadius : maxDist;
 
         if (separationRatio >= 1.8 && maxDist >= 1.1) {
             separationLevel = 'Alta';
-            separationTitle = 'Diferenciación clara entre grupos';
+            separationTitle = 'Diferenciación clara entre perfiles de calidad';
         } else if (separationRatio >= 1.0 && maxDist >= 0.6) {
             separationLevel = 'Moderada';
-            separationTitle = 'Diferencias moderadas entre grupos';
+            separationTitle = 'Diferencias moderadas entre lotes';
         } else {
             separationLevel = 'Baja';
-            separationTitle = 'Perfiles similares (traslape alto)';
+            separationTitle = 'Lotes con perfiles nutricionales muy similares';
         }
 
-        // Identificar qué variables reales diferencian más a gA vs gB
         const diffVars = validVariables
             .map(v => {
                 const statA = gA.variableStats[v.key];
@@ -841,59 +948,60 @@ export function calculatePca(
         const secondDiff = diffVars[1];
 
         if (separationLevel === 'Baja') {
-            mainFinding = `Los segmentos analizados tienen perfiles nutricionales muy parecidos y se mezclan en el mapa. La mayor diferencia leve se da entre "${gA.groupName}" y "${gB.groupName}"${
+            mainFinding = `Los lotes tienen comportamiento muy homogéneo. La mayor diferencia leve ocurre entre "${gA.groupName}" y "${gB.groupName}"${
                 topDiff ? ` en ${topDiff.label} (${formatNum(topDiff.meanA)} vs ${formatNum(topDiff.meanB)} ${topDiff.unit})` : ''
             }.`;
-            recommendation = 'En este criterio la calidad es prácticamente equivalente; enfócate en revisar lotes puntuales alejados del centro o cambia a otro criterio (ej. Origen o Periodo).';
+            recommendation = 'La calidad es uniforme; puedes confiar en el promedio general para formulación.';
         } else {
             const diffText = [topDiff, secondDiff]
                 .filter(Boolean)
                 .map(d => `${d!.label} (${formatNum(d!.meanA)} vs ${formatNum(d!.meanB)} ${d!.unit})`)
                 .join(' y ');
 
-            mainFinding = `La diferencia más marcada ocurre entre "${gA.groupName}" y "${gB.groupName}", impulsada principalmente por ${diffText || 'su perfil nutricional global'}.`;
-            recommendation = `Usa la tabla de promedios reales debajo del mapa para validar si "${gA.groupName}" o "${gB.groupName}" se ajusta mejor a tus requerimientos de formulación o compra.`;
+            if (groupField.startsWith('kmeans_')) {
+                mainFinding = `Se han clasificado automáticamente ${N} lotes en ${groups.length} calidades distintas. "${gA.groupName}" destaca frente a "${gB.groupName}" por ${diffText || 'su perfil general'}.`;
+                recommendation = 'Usa esta clasificación automática para separar lotes en almacén o ajustar fórmulas según el perfil de calidad detectado.';
+            } else {
+                mainFinding = `La diferencia más marcada se observa entre "${gA.groupName}" y "${gB.groupName}", principalmente en ${diffText || 'su composición'}.`;
+                recommendation = 'Revisa la tabla de valores reales debajo del mapa para decidir compras o ajustes de formulación.';
+            }
         }
 
-        // Estabilidad (consistencia)
         const groupsWithMultiple = groups.filter(g => g.sampleCount >= 3);
         if (groupsWithMultiple.length >= 2) {
             const sortedByStab = [...groupsWithMultiple].sort((a, b) => a.radius - b.radius);
             const mostStable = sortedByStab[0];
             const leastStable = sortedByStab[sortedByStab.length - 1];
-            stabilityFinding = `"${mostStable.groupName}" muestra los lotes más uniformes (${mostStable.stabilityLabel}), mientras que "${leastStable.groupName}" presenta la mayor variabilidad entre muestras.`;
+            stabilityFinding = `El grupo "${mostStable.groupName}" es el más constante (${mostStable.stabilityLabel}), mientras que "${leastStable.groupName}" tiene mayor dispersión.`;
         } else {
-            stabilityFinding = `El grupo con más registros es "${groups[0].groupName}" (${groups[0].sampleCount} muestras, ${groups[0].stabilityLabel}).`;
+            stabilityFinding = `El grupo principal es "${groups[0].groupName}" (${groups[0].sampleCount} muestras, ${groups[0].stabilityLabel}).`;
         }
 
         groupInsights.push(mainFinding);
         if (stabilityFinding) groupInsights.push(stabilityFinding);
     }
 
-    // Relación entre nutrientes más fuerte en español simple
     const strongestCorr = topCorrelations[0];
-    let nutrientFinding = 'No se detectan correlaciones lineales fuertes entre los parámetros seleccionados.';
+    let nutrientFinding = 'Parámetros con comportamiento independiente.';
     if (strongestCorr && Math.abs(strongestCorr.correlation) >= 0.35) {
         const isPos = strongestCorr.correlation > 0;
         const strengthWord = Math.abs(strongestCorr.correlation) >= 0.65 ? 'fuerte' : 'moderada';
         nutrientFinding = isPos
-            ? `Relación directa ${strengthWord}: cuando sube ${strongestCorr.var1Label}, también tiende a subir ${strongestCorr.var2Label} (r = +${strongestCorr.correlation.toFixed(2)}).`
-            : `Relación inversa ${strengthWord}: cuando sube ${strongestCorr.var1Label}, suele bajar ${strongestCorr.var2Label} (r = ${strongestCorr.correlation.toFixed(2)}).`;
+            ? `Correlación ${strengthWord}: al subir ${strongestCorr.var1Label}, tiende a subir ${strongestCorr.var2Label} (r = +${strongestCorr.correlation.toFixed(2)}).`
+            : `Correlación inversa ${strengthWord}: al subir ${strongestCorr.var1Label}, tiende a bajar ${strongestCorr.var2Label} (r = ${strongestCorr.correlation.toFixed(2)}).`;
     }
 
-    // Interpretación técnica clásica (conservada para la pestaña estadística)
     const pc1Pos = loadings.filter(l => l.pc1Loading >= 0.4).sort((a, b) => b.pc1Loading - a.pc1Loading).map(l => `${l.label} (+${l.pc1Loading})`);
-    const pc1Neg = loadings.filter(l => l.pc1Loading <= -0.4).sort((a, b) => a.pc1Loading - b.pc1Loading).map(l => `${l.label} (${l.pc1Loading})`);
+    const pc1Neg = loadings.filter(l => l.pc1Loading <= -0.4).sort((a, b) => b.pc1Loading - a.pc1Loading).map(l => `${l.label} (${l.pc1Loading})`);
     const pc2Pos = loadings.filter(l => l.pc2Loading >= 0.35).sort((a, b) => b.pc2Loading - a.pc2Loading).map(l => `${l.label} (+${l.pc2Loading})`);
-    const pc2Neg = loadings.filter(l => l.pc2Loading <= -0.35).sort((a, b) => a.pc2Loading - b.pc2Loading).map(l => `${l.label} (${l.pc2Loading})`);
+    const pc2Neg = loadings.filter(l => l.pc2Loading <= -0.35).sort((a, b) => b.pc2Loading - a.pc2Loading).map(l => `${l.label} (${l.pc2Loading})`);
 
     const strongestRelations = topCorrelations.slice(0, 4).map(c => {
-        const type = c.correlation > 0 ? 'positiva directa' : 'inversa';
-        const strength = Math.abs(c.correlation) > 0.7 ? 'muy fuerte' : Math.abs(c.correlation) > 0.4 ? 'moderada' : 'débil';
-        return `${c.var1Label} y ${c.var2Label} tienen correlación ${strength} ${type} (r = ${c.correlation.toFixed(2)}).`;
+        const type = c.correlation > 0 ? 'directa' : 'inversa';
+        return `${c.var1Label} y ${c.var2Label} (${type}, r = ${c.correlation.toFixed(2)}).`;
     });
 
-    const summary = `El mapa 2D conserva el ${totalVarianceExplained2D}% de la información de ${P} parámetros en ${N} muestras.`;
+    const summary = `Mapa 2D con ${totalVarianceExplained2D}% de retención de información.`;
 
     return {
         isValid: true,
