@@ -1,45 +1,42 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { RawMaterialData } from '../types';
 import { NUTRIENTS, getPrintContrastingColor } from '../constants';
-import { 
-    calculatePca, 
-    PcaResult, 
-    PcaSamplePoint, 
-    PcaLoading, 
-    PcaGroupCluster, 
-    GROUP_PALETTE 
+import {
+    calculatePca,
+    PcaGroupField,
+    PcaResult,
+    PcaSamplePoint,
+    PcaLoading
 } from '../pcaAnalysis';
-import { 
-    Compass, 
-    Layers, 
-    TrendingUp, 
-    Users, 
-    Info, 
-    CheckSquare, 
-    Square, 
-    RotateCcw, 
-    Sparkles, 
-    ArrowUpRight, 
-    Maximize2, 
-    Filter,
-    BarChart3,
-    Table,
-    HelpCircle,
+import {
+    Compass,
+    CheckSquare,
+    Square,
+    RotateCcw,
+    SlidersHorizontal,
     ChevronDown,
-    ChevronUp
+    ChevronUp,
+    BarChart3,
+    Layers,
+    Table,
+    Eye,
+    EyeOff,
+    Calendar,
+    ArrowRight,
+    Info
 } from 'lucide-react';
-import { 
-    ResponsiveContainer, 
-    BarChart, 
-    Bar, 
-    XAxis, 
-    YAxis, 
-    Tooltip as RechartsTooltip, 
-    CartesianGrid, 
-    Line, 
+import {
+    ResponsiveContainer,
+    Bar,
+    XAxis,
+    YAxis,
+    Tooltip as RechartsTooltip,
+    CartesianGrid,
+    Line,
     ComposedChart,
     Cell
 } from 'recharts';
+import { DateInputDDMMYYYY } from './DateInputDDMMYYYY';
 
 interface PcaAnalysisViewProps {
     data: RawMaterialData[];
@@ -47,47 +44,145 @@ interface PcaAnalysisViewProps {
     isPdfMode?: boolean;
 }
 
+const CORE_NUTRIENT_KEYS = ['proteina', 'grasa', 'fibra', 'humedad', 'ceniza', 'almidon', 'xantofilas'];
+
+const GROUP_OPTIONS: { id: PcaGroupField; label: string }[] = [
+    { id: 'Origen', label: 'Origen' },
+    { id: 'Cliente', label: 'Cliente' },
+    { id: 'Proveedor', label: 'Proveedor' },
+    { id: 'period_split', label: 'Antes vs Después' },
+    { id: 'quarter', label: 'Trimestre' },
+    { id: 'month', label: 'Mes' },
+    { id: 'year', label: 'Año' },
+    { id: 'subtipo', label: 'Subtipo' },
+    { id: 'material', label: 'Materia Prima' }
+];
+
 export const PcaAnalysisView: React.FC<PcaAnalysisViewProps> = ({
     data,
     selectedMaterial,
     isPdfMode = false
 }) => {
-    // 1. Estados de configuración
-    const [groupField, setGroupField] = useState<'Cliente' | 'Proveedor' | 'subtipo' | 'material' | 'month'>('Cliente');
-    const [showCentroids, setShowCentroids] = useState<boolean>(true);
-    const [showVectors, setShowVectors] = useState<boolean>(true);
-    const [showSampleLabels, setShowSampleLabels] = useState<boolean>(false);
-    const [activeTab, setActiveTab] = useState<'biplot' | 'scree' | 'loadings' | 'correlation' | 'clients'>('biplot');
-    const [hoveredSample, setHoveredSample] = useState<PcaSamplePoint | null>(null);
-    const [hoveredLoading, setHoveredLoading] = useState<PcaLoading | null>(null);
-    const [selectedGroupFilter, setSelectedGroupFilter] = useState<string>('TODOS');
-    const [showInterpretationGuide, setShowInterpretationGuide] = useState<boolean>(true);
+    // Detectar qué dimensiones tienen múltiples valores en los datos actuales
+    const dimensionCounts = useMemo(() => {
+        const countDistinct = (getter: (d: RawMaterialData) => string | undefined) => {
+            const s = new Set(
+                data
+                    .map(d => String(getter(d) || '').trim())
+                    .filter(v => v.length > 0)
+            );
+            return s.size;
+        };
 
-    // 2. Nutrientes con datos presentes en este dataset para preseleccionarlos
-    const nutrientsWithData = useMemo(() => {
-        return NUTRIENTS.filter(n => {
-            const hasValues = data.some(d => {
-                const val = d[n.key];
-                return typeof val === 'number' && !isNaN(val) && val !== 0;
-            });
-            return hasValues;
-        });
+        return {
+            Origen: countDistinct(d => d.Origen),
+            Cliente: countDistinct(d => d.Cliente),
+            Proveedor: countDistinct(d => d.Proveedor),
+            subtipo: countDistinct(d => d.subtipo),
+            material: countDistinct(d => d.material)
+        };
     }, [data]);
 
-    // Variables seleccionadas por el usuario (por defecto los parámetros nutricionales principales disponibles)
+    // Elegir por defecto la dimensión más informativa disponible
+    const getDefaultGroupField = (): PcaGroupField => {
+        if (dimensionCounts.Origen >= 2) return 'Origen';
+        if (dimensionCounts.Cliente >= 2) return 'Cliente';
+        if (dimensionCounts.Proveedor >= 2) return 'Proveedor';
+        if (dimensionCounts.subtipo >= 2) return 'subtipo';
+        return 'period_split';
+    };
+
+    const [groupField, setGroupField] = useState<PcaGroupField>(getDefaultGroupField);
+    const [cutoffDateIso, setCutoffDateIso] = useState<string | null>(null);
+
+    // Filtros cruzados locales dentro de PCA para segregar fácilmente (ej. ver Origen dentro de un Cliente específico)
+    const [localFilterCliente, setLocalFilterCliente] = useState<string>('TODOS');
+    const [localFilterOrigen, setLocalFilterOrigen] = useState<string>('TODOS');
+    const [localFilterProveedor, setLocalFilterProveedor] = useState<string>('TODOS');
+
+    // Controles visuales del mapa
+    const [mapDensity, setMapDensity] = useState<'all' | 'zones'>('all');
+    const [showVectors, setShowVectors] = useState<boolean>(true);
+    const [showSampleLabels, setShowSampleLabels] = useState<boolean>(false);
+    const [hiddenGroups, setHiddenGroups] = useState<string[]>([]);
+    const [showParamSelector, setShowParamSelector] = useState<boolean>(false);
+    const [activeSection, setActiveSection] = useState<'decision' | 'relations' | 'technical'>('decision');
+
+    const [hoveredSample, setHoveredSample] = useState<PcaSamplePoint | null>(null);
+    const [hoveredLoading, setHoveredLoading] = useState<PcaLoading | null>(null);
+
+    // Opciones para los filtros cruzados locales
+    const localOptions = useMemo(() => {
+        const extract = (key: 'Cliente' | 'Origen' | 'Proveedor') => {
+            const vals = Array.from(
+                new Set(
+                    data
+                        .map(d => String(d[key] || '').trim())
+                        .filter(Boolean)
+                )
+            ).sort();
+            return vals;
+        };
+        return {
+            clientes: extract('Cliente'),
+            origenes: extract('Origen'),
+            proveedores: extract('Proveedor')
+        };
+    }, [data]);
+
+    // Aplicar filtros cruzados locales sin afectar al resto de la aplicación
+    const scopedData = useMemo(() => {
+        return data.filter(d => {
+            if (localFilterCliente !== 'TODOS' && String(d.Cliente || '').trim() !== localFilterCliente) return false;
+            if (localFilterOrigen !== 'TODOS' && String(d.Origen || '').trim() !== localFilterOrigen) return false;
+            if (localFilterProveedor !== 'TODOS' && String(d.Proveedor || '').trim() !== localFilterProveedor) return false;
+            return true;
+        });
+    }, [data, localFilterCliente, localFilterOrigen, localFilterProveedor]);
+
+    // Nutrientes con datos presentes en el conjunto actual (ignorando ceros vacíos)
+    const nutrientsWithData = useMemo(() => {
+        return NUTRIENTS.filter(n =>
+            scopedData.some(d => {
+                const raw = d[n.key];
+                if (raw === undefined || raw === null || raw === '') return false;
+                const val = Number(raw);
+                return !isNaN(val) && isFinite(val) && val !== 0;
+            })
+        );
+    }, [scopedData]);
+
+    const coreNutrientsAvailable = useMemo(
+        () => nutrientsWithData.filter(n => n.category === 'nutrients'),
+        [nutrientsWithData]
+    );
+    const mycotoxinsAvailable = useMemo(
+        () => nutrientsWithData.filter(n => n.category === 'mycotoxins'),
+        [nutrientsWithData]
+    );
+
     const [selectedVarKeys, setSelectedVarKeys] = useState<string[]>(() => {
-        const defaultPreferred = ['proteina', 'grasa', 'fibra', 'humedad', 'ceniza', 'almidon', 'xantofilas'];
         const available = nutrientsWithData.map(n => n.key);
-        const initial = defaultPreferred.filter(k => available.includes(k));
-        return initial.length >= 2 ? initial : available.slice(0, 6);
+        const preferred = CORE_NUTRIENT_KEYS.filter(k => available.includes(k));
+        if (preferred.length >= 2) return preferred;
+        const onlyNutrients = nutrientsWithData.filter(n => n.category === 'nutrients').map(n => n.key);
+        return onlyNutrients.length >= 2 ? onlyNutrients.slice(0, 7) : available.slice(0, 6);
     });
 
-    // Mantener la lista si los datos cambian
-    useMemo(() => {
-        if (selectedVarKeys.length === 0 && nutrientsWithData.length >= 2) {
-            setSelectedVarKeys(nutrientsWithData.slice(0, 6).map(n => n.key));
+    // Sincronizar si cambia la materia prima o el dataset
+    useEffect(() => {
+        const available = nutrientsWithData.map(n => n.key);
+        const validSelected = selectedVarKeys.filter(k => available.includes(k));
+        if (validSelected.length < 2 && available.length >= 2) {
+            const preferred = CORE_NUTRIENT_KEYS.filter(k => available.includes(k));
+            setSelectedVarKeys(preferred.length >= 2 ? preferred : available.slice(0, 7));
         }
-    }, [nutrientsWithData, selectedVarKeys.length]);
+    }, [nutrientsWithData]);
+
+    // Limpiar grupos ocultos al cambiar el criterio de agrupación
+    useEffect(() => {
+        setHiddenGroups([]);
+    }, [groupField, scopedData.length]);
 
     const toggleVariable = (key: string) => {
         if (selectedVarKeys.includes(key)) {
@@ -99,932 +194,1200 @@ export const PcaAnalysisView: React.FC<PcaAnalysisViewProps> = ({
         }
     };
 
-    const handleSelectAllVariables = () => {
-        setSelectedVarKeys(nutrientsWithData.map(n => n.key));
+    const applyPreset = (preset: 'core' | 'all_nutrients' | 'all') => {
+        if (preset === 'core') {
+            const available = nutrientsWithData.map(n => n.key);
+            const preferred = CORE_NUTRIENT_KEYS.filter(k => available.includes(k));
+            setSelectedVarKeys(preferred.length >= 2 ? preferred : available.slice(0, 7));
+        } else if (preset === 'all_nutrients') {
+            const list = coreNutrientsAvailable.map(n => n.key);
+            if (list.length >= 2) setSelectedVarKeys(list);
+        } else {
+            setSelectedVarKeys(nutrientsWithData.map(n => n.key));
+        }
     };
 
-    const handleResetVariables = () => {
-        const defaultPreferred = ['proteina', 'grasa', 'fibra', 'humedad', 'ceniza', 'almidon', 'xantofilas'];
-        const available = nutrientsWithData.map(n => n.key);
-        const resetKeys = defaultPreferred.filter(k => available.includes(k));
-        setSelectedVarKeys(resetKeys.length >= 2 ? resetKeys : available.slice(0, 6));
-    };
-
-    // 3. Ejecución del algoritmo matemático de PCA
+    // Cálculo del PCA
     const pca: PcaResult = useMemo(() => {
-        return calculatePca(data, selectedVarKeys, groupField);
-    }, [data, selectedVarKeys, groupField]);
+        return calculatePca(scopedData, selectedVarKeys, groupField, {
+            cutoffDateIso
+        });
+    }, [scopedData, selectedVarKeys, groupField, cutoffDateIso]);
 
-    // Muestras filtradas por grupo seleccionado (para visualización focalizada)
-    const displayedSamples = useMemo(() => {
+    // Inicializar fecha de corte sugerida si está vacía
+    const effectiveCutoffIso = cutoffDateIso || pca.suggestedCutoffIso;
+
+    // Grupos visibles
+    const visibleGroups = useMemo(() => {
+        return pca.groups.filter(g => !hiddenGroups.includes(g.groupName));
+    }, [pca.groups, hiddenGroups]);
+
+    const visibleSamples = useMemo(() => {
         if (!pca.isValid) return [];
-        if (selectedGroupFilter === 'TODOS') return pca.samples;
-        return pca.samples.filter(s => s.group === selectedGroupFilter);
-    }, [pca, selectedGroupFilter]);
+        return pca.samples.filter(s => !hiddenGroups.includes(s.group));
+    }, [pca, hiddenGroups]);
 
-    // Dimensiones y escalamiento SVG para el Biplot
-    const svgWidth = 800;
-    const svgHeight = 560;
-    const margin = 60;
-    const innerWidth = svgWidth - margin * 2;
-    const innerHeight = svgHeight - margin * 2;
-    const centerX = margin + innerWidth / 2;
-    const centerY = margin + innerHeight / 2;
+    const toggleGroupVisibility = (groupName: string) => {
+        setHiddenGroups(prev => {
+            if (prev.includes(groupName)) {
+                return prev.filter(g => g !== groupName);
+            }
+            // Evitar ocultar absolutamente todos
+            if (prev.length >= pca.groups.length - 1) return prev;
+            return [...prev, groupName];
+        });
+    };
 
-    // Rango de coordenadas para el Biplot: [-1.2, 1.2]
-    const biplotDomain = 1.25;
+    const isolateGroup = (groupName: string) => {
+        const allOthers = pca.groups.map(g => g.groupName).filter(name => name !== groupName);
+        if (hiddenGroups.length === allOthers.length && !hiddenGroups.includes(groupName)) {
+            setHiddenGroups([]);
+        } else {
+            setHiddenGroups(allOthers);
+        }
+    };
+
+    const hasLocalFilters =
+        localFilterCliente !== 'TODOS' ||
+        localFilterOrigen !== 'TODOS' ||
+        localFilterProveedor !== 'TODOS';
+
+    const resetLocalFilters = () => {
+        setLocalFilterCliente('TODOS');
+        setLocalFilterOrigen('TODOS');
+        setLocalFilterProveedor('TODOS');
+    };
+
+    // Coordenadas SVG del mapa
+    const svgWidth = 820;
+    const svgHeight = 520;
+    const marginX = 72;
+    const marginY = 58;
+    const innerWidth = svgWidth - marginX * 2;
+    const innerHeight = svgHeight - marginY * 2;
+    const centerX = marginX + innerWidth / 2;
+    const centerY = marginY + innerHeight / 2;
+    const biplotDomain = 1.15;
+
     const scaleX = (val: number) => centerX + (val / biplotDomain) * (innerWidth / 2);
-    const scaleY = (val: number) => centerY - (val / biplotDomain) * (innerHeight / 2); // Invertir Y para orientación matemática estándar
+    const scaleY = (val: number) => centerY - (val / biplotDomain) * (innerHeight / 2);
+    const scaleRadius = (rScaled: number) => (rScaled / biplotDomain) * (innerWidth / 2);
+
+    const formatMetric = (val: number | null) => {
+        if (val === null || isNaN(val)) return '—';
+        if (Math.abs(val) >= 100) return val.toFixed(1);
+        return val.toFixed(2);
+    };
+
+    const activeGroupOptionLabel = GROUP_OPTIONS.find(o => o.id === groupField)?.label || groupField;
+
+    // Clases base adaptativas (Dark vs White/PDF)
+    const cardCls = isPdfMode
+        ? 'bg-white border border-slate-200 text-slate-900'
+        : 'bg-ui-card border border-ui-border text-slate-100';
+    const subtlePanelCls = isPdfMode
+        ? 'bg-slate-50 border border-slate-200 text-slate-800'
+        : 'bg-ui-darkest/70 border border-ui-border text-slate-200';
+    const mutedTextCls = isPdfMode ? 'text-slate-600' : 'text-slate-400';
+    const headingTextCls = isPdfMode ? 'text-slate-900' : 'text-slate-100';
 
     if (!pca.isValid) {
         return (
-            <div className={`p-8 rounded-2xl border text-center ${
-                isPdfMode ? 'bg-white border-slate-200 text-slate-800' : 'bg-ui-card border-ui-border text-slate-300'
-            }`}>
-                <Compass className="w-12 h-12 mx-auto text-amber-500 mb-4 animate-pulse" />
-                <h3 className="text-lg font-bold mb-2">No se pudo calcular el Análisis de Componentes Principales</h3>
-                <p className="text-sm max-w-md mx-auto mb-4 text-slate-400">
-                    {pca.errorMessage || 'Verifica que existan al menos 3 registros con datos en 2 o más nutrientes.'}
-                </p>
-                <div className="flex justify-center gap-3">
+            <div className={`p-8 rounded-2xl text-center space-y-4 ${cardCls}`}>
+                <Compass className={`w-10 h-10 mx-auto ${isPdfMode ? 'text-amber-600' : 'text-amber-400'}`} />
+                <div>
+                    <h3 className={`text-lg font-bold ${headingTextCls}`}>
+                        No hay datos suficientes para generar el mapa comparativo (PCA)
+                    </h3>
+                    <p className={`text-sm max-w-lg mx-auto mt-1 ${mutedTextCls}`}>
+                        {pca.errorMessage || 'Verifica que existan al menos 3 muestras y 2 parámetros con valores registrados.'}
+                    </p>
+                </div>
+                <div className="flex flex-wrap justify-center gap-3 pt-2">
+                    {hasLocalFilters && (
+                        <button
+                            type="button"
+                            onClick={resetLocalFilters}
+                            className={`px-4 py-2 rounded-lg text-xs font-semibold border cursor-pointer ${
+                                isPdfMode
+                                    ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-50'
+                                    : 'bg-ui-darkest border-ui-border text-slate-200 hover:border-ui-accent'
+                            }`}
+                        >
+                            Quitar filtros internos de PCA
+                        </button>
+                    )}
                     <button
-                        onClick={handleSelectAllVariables}
-                        className="px-4 py-2 bg-ui-accent text-[#040d1a] font-bold rounded-lg text-xs"
+                        type="button"
+                        onClick={() => applyPreset('all')}
+                        className="px-4 py-2 bg-ui-accent text-[#040d1a] font-bold rounded-lg text-xs cursor-pointer"
                     >
-                        Seleccionar todos los parámetros disponibles
+                        Incluir todos los parámetros disponibles
                     </button>
                 </div>
             </div>
         );
     }
 
+    const sepBadgeStyle = (() => {
+        if (pca.decisionSummary.separationLevel === 'Alta') {
+            return isPdfMode
+                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                : 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50';
+        }
+        if (pca.decisionSummary.separationLevel === 'Moderada') {
+            return isPdfMode
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-amber-950/60 text-amber-300 border-amber-700/50';
+        }
+        return isPdfMode
+            ? 'bg-slate-100 text-slate-700 border-slate-300'
+            : 'bg-ui-darkest text-slate-300 border-ui-border';
+    })();
+
     return (
         <div className="space-y-6 animate-fade-in">
-            {/* Header del Módulo PCA */}
-            <div className={`p-6 rounded-2xl border transition-all ${
-                isPdfMode 
-                    ? 'bg-white border-slate-200 text-slate-900 shadow-sm' 
-                    : 'bg-ui-card border-ui-border text-slate-100 shadow-md'
-            }`}>
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-ui-border/40">
-                    <div className="flex items-start space-x-3">
-                        <div className={`p-3 rounded-xl ${isPdfMode ? 'bg-sky-50 text-sky-700 border border-sky-200' : 'bg-ui-accent/10 text-ui-accent border border-ui-accent/20'}`}>
-                            <Compass className="w-6 h-6" />
-                        </div>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded ${
-                                    isPdfMode ? 'bg-slate-100 text-slate-700' : 'bg-ui-darkest text-ui-accent border border-ui-border'
-                                }`}>
-                                    Estadística Multivariada
-                                </span>
-                                <span className="text-xs text-slate-400">•</span>
-                                <span className="text-xs font-semibold text-emerald-400">
-                                    {pca.sampleCount} Muestras Procesadas
-                                </span>
-                            </div>
-                            <h2 className={`text-xl md:text-2xl font-black mt-1 ${isPdfMode ? 'text-slate-900' : 'text-slate-100'}`}>
-                                Análisis de Componentes Principales (PCA)
-                            </h2>
-                            <p className={`text-xs mt-1 max-w-3xl ${isPdfMode ? 'text-slate-600' : 'text-slate-400'}`}>
-                                Proyección en plano factorial 2D de las variables nutricionales para descubrir correlaciones, perfiles homogéneos y diferencias entre clientes o lotes.
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Selector de Agrupación Principal (Clientes, etc.) */}
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center space-x-2">
-                            <span className={`text-xs font-bold ${isPdfMode ? 'text-slate-700' : 'text-slate-300'}`}>
-                                Agrupar por:
-                            </span>
-                            <select
-                                value={groupField}
-                                onChange={(e) => setGroupField(e.target.value as any)}
-                                className={`text-xs font-bold py-2 px-3 rounded-lg border focus:ring-2 focus:ring-ui-accent outline-none cursor-pointer ${
-                                    isPdfMode 
-                                        ? 'bg-slate-50 border-slate-300 text-slate-900' 
-                                        : 'bg-ui-darkest border-ui-border text-ui-accent'
-                                }`}
-                            >
-                                <option value="Cliente">🏢 Clientes</option>
-                                <option value="Proveedor">🚚 Proveedores</option>
-                                <option value="month">📅 Mes / Período</option>
-                                <option value="subtipo">🏷️ Subtipo</option>
-                                <option value="material">🌾 Materia Prima</option>
-                            </select>
-                        </div>
-
-                        {/* Botón Guía Rápida */}
-                        <button
-                            type="button"
-                            onClick={() => setShowInterpretationGuide(!showInterpretationGuide)}
-                            className={`flex items-center space-x-1.5 px-3 py-2 rounded-lg text-xs font-semibold border transition-all ${
-                                showInterpretationGuide 
-                                    ? (isPdfMode ? 'bg-sky-50 text-sky-800 border-sky-200' : 'bg-ui-accent/15 text-ui-accent border-ui-accent/30')
-                                    : (isPdfMode ? 'bg-slate-50 text-slate-600 border-slate-200' : 'bg-ui-darkest text-slate-400 border-ui-border')
-                            }`}
-                        >
-                            <HelpCircle className="w-3.5 h-3.5" />
-                            <span>{showInterpretationGuide ? 'Ocultar Guía' : 'Guía de Interpretación'}</span>
-                        </button>
-                    </div>
-                </div>
-
-                {/* Métricas Clave de PCA */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
-                    <div className={`p-3.5 rounded-xl border ${
-                        isPdfMode ? 'bg-sky-50/50 border-sky-100' : 'bg-ui-darkest/60 border-ui-border/50'
-                    }`}>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Varianza PC1</div>
-                        <div className={`text-xl font-black mt-0.5 ${isPdfMode ? 'text-sky-800' : 'text-sky-400'}`}>
-                            {pca.components[0]?.varianceExplainedPct}%
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            Autovalor λ₁ = {pca.components[0]?.eigenvalue.toFixed(2)}
-                        </div>
-                    </div>
-
-                    <div className={`p-3.5 rounded-xl border ${
-                        isPdfMode ? 'bg-emerald-50/50 border-emerald-100' : 'bg-ui-darkest/60 border-ui-border/50'
-                    }`}>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Varianza PC2</div>
-                        <div className={`text-xl font-black mt-0.5 ${isPdfMode ? 'text-emerald-800' : 'text-emerald-400'}`}>
-                            {pca.components[1]?.varianceExplainedPct}%
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            Autovalor λ₂ = {pca.components[1]?.eigenvalue.toFixed(2)}
-                        </div>
-                    </div>
-
-                    <div className={`p-3.5 rounded-xl border ${
-                        isPdfMode ? 'bg-amber-50/50 border-amber-100' : 'bg-ui-darkest/60 border-ui-border/50'
-                    }`}>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Varianza Total 2D</div>
-                        <div className={`text-xl font-black mt-0.5 ${isPdfMode ? 'text-amber-800' : 'text-amber-400'}`}>
-                            {pca.totalVarianceExplained2D}%
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            Retención en el plano PC1+PC2
-                        </div>
-                    </div>
-
-                    <div className={`p-3.5 rounded-xl border ${
-                        isPdfMode ? 'bg-purple-50/50 border-purple-100' : 'bg-ui-darkest/60 border-ui-border/50'
-                    }`}>
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Dimensiones</div>
-                        <div className={`text-xl font-black mt-0.5 ${isPdfMode ? 'text-purple-800' : 'text-purple-400'}`}>
-                            {pca.variableCount} <span className="text-xs font-normal text-slate-400">Nutrientes</span>
-                        </div>
-                        <div className="text-[10px] text-slate-400 font-mono mt-0.5">
-                            {pca.groups.length} Grupos / Segmentos
-                        </div>
-                    </div>
-                </div>
-
-                {/* Selector Interactivo de Nutrientes a Incluir en el PCA */}
-                <div className="mt-6 pt-5 border-t border-ui-border/40">
-                    <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-                        <div className="flex items-center space-x-2">
-                            <Filter className="w-3.5 h-3.5 text-ui-accent" />
-                            <span className={`text-xs font-bold uppercase tracking-wider ${isPdfMode ? 'text-slate-800' : 'text-slate-300'}`}>
-                                Variables Nutricionales en el Modelo ({selectedVarKeys.length} seleccionadas):
+            {/* 1. ENCABEZADO Y CONTROLES DE SEGREGACIÓN */}
+            <div className={`p-5 md:p-6 rounded-2xl ${cardCls}`}>
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-5 border-b border-ui-border/40">
+                    <div>
+                        <div className={`flex flex-wrap items-center gap-2 text-xs ${mutedTextCls}`}>
+                            <span className="font-semibold">Análisis Multivariado (PCA)</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">{pca.sampleCount} muestras</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">{pca.variableCount} parámetros</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">
+                                Fidelidad del mapa: {pca.totalVarianceExplained2D}%
                             </span>
                         </div>
-                        <div className="flex items-center space-x-2 text-xs">
-                            <button
-                                type="button"
-                                onClick={handleSelectAllVariables}
-                                className="text-ui-accent hover:underline text-[11px] font-semibold cursor-pointer"
-                            >
-                                Todas
-                            </button>
-                            <span className="text-slate-500">•</span>
-                            <button
-                                type="button"
-                                onClick={handleResetVariables}
-                                className="text-slate-400 hover:text-slate-200 text-[11px] cursor-pointer flex items-center gap-1"
-                            >
-                                <RotateCcw className="w-2.5 h-2.5" />
-                                <span>Por Defecto</span>
-                            </button>
-                        </div>
+                        <h2 className={`text-xl md:text-2xl font-bold tracking-tight mt-1 ${headingTextCls}`}>
+                            Comparador de Perfiles por {activeGroupOptionLabel}
+                        </h2>
+                        <p className={`text-xs mt-1 max-w-3xl ${mutedTextCls}`}>
+                            Agrupa tus muestras automáticamente por calidad nutricional para detectar qué orígenes, clientes, proveedores o fechas tienen diferencias reales.
+                        </p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
-                        {nutrientsWithData.map(nutrient => {
-                            const isSelected = selectedVarKeys.includes(nutrient.key);
-                            const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
-                            const unit = nutrient.label.includes('%') ? '%' : nutrient.label.includes('ppm') ? 'ppm' : 'ppb';
-                            const contrastColor = getPrintContrastingColor(nutrient.color, isPdfMode);
-
-                            return (
+                    {/* Navegación simple de profundidad */}
+                    {!isPdfMode && (
+                        <div className="flex items-center gap-1 p-1 rounded-xl bg-ui-darkest border border-ui-border self-start lg:self-center">
+                            {[
+                                { id: 'decision', label: 'Mapa y Decisiones' },
+                                { id: 'relations', label: 'Relación entre Nutrientes' },
+                                { id: 'technical', label: 'Detalle Estadístico' }
+                            ].map(tab => (
                                 <button
-                                    key={nutrient.key}
+                                    key={tab.id}
                                     type="button"
-                                    onClick={() => toggleVariable(nutrient.key)}
-                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center space-x-2 border transition-all cursor-pointer ${
-                                        isSelected
-                                            ? (isPdfMode 
-                                                ? 'bg-slate-100 border-slate-300 text-slate-900 shadow-sm' 
-                                                : 'bg-ui-darkest border-ui-accent text-slate-100 shadow-[0_0_10px_rgba(0,222,255,0.15)]')
-                                            : (isPdfMode
-                                                ? 'bg-white border-slate-200 text-slate-400 opacity-60'
-                                                : 'bg-ui-darkest/40 border-ui-border text-slate-500 opacity-60')
+                                    onClick={() => setActiveSection(tab.id as any)}
+                                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors cursor-pointer ${
+                                        activeSection === tab.id
+                                            ? 'bg-ui-accent text-[#040d1a] font-bold'
+                                            : 'text-slate-300 hover:text-white'
                                     }`}
                                 >
-                                    <span 
-                                        className="w-2.5 h-2.5 rounded-full inline-block shrink-0" 
-                                        style={{ backgroundColor: contrastColor }} 
-                                    />
-                                    <span>{cleanLabel}</span>
-                                    <span className="text-[10px] text-slate-400 font-normal font-mono">({unit})</span>
-                                    {isSelected ? (
-                                        <CheckSquare className="w-3.5 h-3.5 text-ui-accent" />
-                                    ) : (
-                                        <Square className="w-3.5 h-3.5 text-slate-500" />
-                                    )}
-                                </button>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
-
-            {/* Guía Didáctica Desplegable de Interpretación */}
-            {showInterpretationGuide && (
-                <div className={`p-5 rounded-2xl border transition-all ${
-                    isPdfMode ? 'bg-amber-50/70 border-amber-200 text-slate-800' : 'bg-amber-950/20 border-amber-500/30 text-slate-200'
-                }`}>
-                    <div className="flex items-start space-x-3">
-                        <Sparkles className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-                        <div className="space-y-2 text-xs leading-relaxed">
-                            <h3 className="text-sm font-bold text-amber-300 flex items-center gap-2">
-                                <span>¿Cómo interpretar este Análisis Multivariado (PCA)?</span>
-                            </h3>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 pt-1">
-                                <div className="space-y-1">
-                                    <strong className="text-slate-100 font-bold block">1. Vectores / Flechas de Nutrientes:</strong>
-                                    <p className={isPdfMode ? 'text-slate-700' : 'text-slate-300'}>
-                                        La dirección indica hacia dónde crece cada nutriente. Si dos flechas apuntan juntas (ángulo cerrado), están <span className="font-bold text-emerald-400">positivamente correlacionadas</span> (suben juntas). Si apuntan en sentidos opuestos (180°), son <span className="font-bold text-rose-400">inversas</span>. Si forman 90°, son <span className="font-bold text-slate-400">independientes</span>.
-                                    </p>
-                                </div>
-                                <div className="space-y-1">
-                                    <strong className="text-slate-100 font-bold block">2. Muestras y Clientes (Puntos):</strong>
-                                    <p className={isPdfMode ? 'text-slate-700' : 'text-slate-300'}>
-                                        Cada punto es un lote o muestra. Muestras cercanas tienen calidad química casi idéntica. Si un cliente tiene sus puntos agrupados en la dirección de la flecha de <em>Proteína</em> o <em>Xantofilas</em>, significa que sus lotes reciben mayor concentración de ese parámetro.
-                                    </p>
-                                </div>
-                                <div className="space-y-1">
-                                    <strong className="text-slate-100 font-bold block">3. Cuadrantes y Centroides:</strong>
-                                    <p className={isPdfMode ? 'text-slate-700' : 'text-slate-300'}>
-                                        El centro (0,0) representa el promedio general de la materia prima. Puntos alejados hacia la derecha tienen valores de PC1 altos; hacia arriba, valores de PC2 altos.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Pestañas de Vistas Específicas del PCA */}
-            <div className="flex flex-wrap gap-2 border-b border-ui-border/50 pb-2">
-                {[
-                    { id: 'biplot', label: '📊 Biplot 2D (Muestras + Vectores)', icon: Compass },
-                    { id: 'clients', label: '🏢 Comparativa por Cliente / Grupo', icon: Users },
-                    { id: 'loadings', label: '🧭 Cargas Factoriales (Loadings)', icon: Table },
-                    { id: 'correlation', label: '🔗 Matriz de Correlación', icon: Layers },
-                    { id: 'scree', label: '📈 Varianza Explicada (Scree)', icon: BarChart3 }
-                ].map(tab => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.id;
-                    return (
-                        <button
-                            key={tab.id}
-                            type="button"
-                            onClick={() => setActiveTab(tab.id as any)}
-                            className={`px-4 py-2 rounded-xl text-xs font-bold flex items-center space-x-2 border transition-all cursor-pointer ${
-                                isActive
-                                    ? 'bg-ui-accent text-[#040d1a] border-ui-accent shadow-[0_0_12px_rgba(0,222,255,0.25)]'
-                                    : (isPdfMode 
-                                        ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' 
-                                        : 'bg-ui-card border-ui-border text-slate-300 hover:bg-ui-darkest')
-                            }`}
-                        >
-                            <Icon className="w-3.5 h-3.5" />
-                            <span>{tab.label}</span>
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* VISTA 1: BIPLOT 2D */}
-            {(activeTab === 'biplot' || isPdfMode) && (
-                <div className={`p-6 rounded-2xl border ${
-                    isPdfMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-ui-card border-ui-border text-slate-100'
-                }`}>
-                    <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-ui-border/40 gap-3 mb-4">
-                        <div>
-                            <h3 className="text-base font-bold flex items-center space-x-2">
-                                <span>Biplot Factorial 2D: PC1 vs PC2</span>
-                                <span className={`text-[11px] font-mono px-2 py-0.5 rounded ${
-                                    isPdfMode ? 'bg-slate-100 text-slate-700' : 'bg-ui-darkest text-ui-accent border border-ui-border'
-                                }`}>
-                                    {pca.totalVarianceExplained2D}% Varianza Acumulada
-                                </span>
-                            </h3>
-                            <p className={`text-xs ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                Muestra las observaciones agrupadas por color y las flechas de los nutrientes analizados.
-                            </p>
-                        </div>
-
-                        {/* Controles de visualización del Biplot */}
-                        <div className="flex flex-wrap items-center gap-3 text-xs">
-                            <label className="flex items-center space-x-1.5 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={showVectors}
-                                    onChange={(e) => setShowVectors(e.target.checked)}
-                                    className="rounded border-ui-border text-ui-accent focus:ring-0"
-                                />
-                                <span className={isPdfMode ? 'text-slate-700 font-medium' : 'text-slate-300'}>Vectores de Nutrientes</span>
-                            </label>
-
-                            <label className="flex items-center space-x-1.5 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={showCentroids}
-                                    onChange={(e) => setShowCentroids(e.target.checked)}
-                                    className="rounded border-ui-border text-ui-accent focus:ring-0"
-                                />
-                                <span className={isPdfMode ? 'text-slate-700 font-medium' : 'text-slate-300'}>Centroides</span>
-                            </label>
-
-                            {/* Filtro rápido por grupo */}
-                            <select
-                                value={selectedGroupFilter}
-                                onChange={(e) => setSelectedGroupFilter(e.target.value)}
-                                className={`text-xs font-semibold py-1 px-2.5 rounded-lg border outline-none ${
-                                    isPdfMode ? 'bg-slate-50 border-slate-300 text-slate-800' : 'bg-ui-darkest border-ui-border text-slate-200'
-                                }`}
-                            >
-                                <option value="TODOS">Todos los grupos ({pca.groups.length})</option>
-                                {pca.groups.map(g => (
-                                    <option key={g.groupName} value={g.groupName}>
-                                        {g.groupName} ({g.sampleCount})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                    </div>
-
-                    {/* Gráfico SVG Biplot */}
-                    <div className="relative w-full overflow-hidden flex flex-col items-center">
-                        <div className="w-full max-w-[950px] aspect-[800/560] relative">
-                            <svg
-                                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                                className="w-full h-full select-none"
-                                style={{
-                                    backgroundColor: isPdfMode ? '#ffffff' : '#040d1a',
-                                    borderRadius: '16px',
-                                    border: isPdfMode ? '1px solid #e2e8f0' : '1px solid rgba(255,255,255,0.08)'
-                                }}
-                            >
-                                <defs>
-                                    {/* Marcador de punta de flecha para vectores */}
-                                    <marker
-                                        id="arrowhead"
-                                        markerWidth="7"
-                                        markerHeight="7"
-                                        refX="5"
-                                        refY="3.5"
-                                        orient="auto"
-                                    >
-                                        <polygon points="0 0, 7 3.5, 0 7" fill="#0284c7" />
-                                    </marker>
-                                </defs>
-
-                                {/* Cuadrícula de referencia y ejes */}
-                                <line 
-                                    x1={margin} 
-                                    y1={centerY} 
-                                    x2={svgWidth - margin} 
-                                    y2={centerY} 
-                                    stroke={isPdfMode ? '#cbd5e1' : '#334155'} 
-                                    strokeWidth="1.5" 
-                                    strokeDasharray="4 4" 
-                                />
-                                <line 
-                                    x1={centerX} 
-                                    y1={margin} 
-                                    x2={centerX} 
-                                    y2={svgHeight - margin} 
-                                    stroke={isPdfMode ? '#cbd5e1' : '#334155'} 
-                                    strokeWidth="1.5" 
-                                    strokeDasharray="4 4" 
-                                />
-
-                                {/* Círculos concéntricos de correlación unitaria */}
-                                <circle 
-                                    cx={centerX} 
-                                    cy={centerY} 
-                                    r={(innerWidth / 2) * (1.0 / biplotDomain)} 
-                                    fill="none" 
-                                    stroke={isPdfMode ? '#e2e8f0' : '#1e293b'} 
-                                    strokeWidth="1" 
-                                    strokeDasharray="2 3" 
-                                />
-
-                                {/* Etiquetas de Ejes */}
-                                <text 
-                                    x={svgWidth - margin} 
-                                    y={centerY - 8} 
-                                    textAnchor="end" 
-                                    fill={isPdfMode ? '#0f172a' : '#38bdf8'} 
-                                    fontSize="12" 
-                                    fontWeight="bold"
-                                    fontFamily="sans-serif"
-                                >
-                                    PC1 ({pca.components[0]?.varianceExplainedPct}%) →
-                                </text>
-                                <text 
-                                    x={margin} 
-                                    y={centerY - 8} 
-                                    textAnchor="start" 
-                                    fill={isPdfMode ? '#64748b' : '#64748b'} 
-                                    fontSize="10" 
-                                    fontFamily="sans-serif"
-                                >
-                                    ← PC1 Negativo
-                                </text>
-
-                                <text 
-                                    x={centerX + 10} 
-                                    y={margin + 12} 
-                                    textAnchor="start" 
-                                    fill={isPdfMode ? '#0f172a' : '#10b981'} 
-                                    fontSize="12" 
-                                    fontWeight="bold"
-                                    fontFamily="sans-serif"
-                                >
-                                    ↑ PC2 ({pca.components[1]?.varianceExplainedPct}%)
-                                </text>
-
-                                {/* Centroide (0,0) */}
-                                <circle 
-                                    cx={centerX} 
-                                    cy={centerY} 
-                                    r="4" 
-                                    fill={isPdfMode ? '#64748b' : '#94a3b8'} 
-                                />
-                                <text 
-                                    x={centerX + 6} 
-                                    y={centerY + 14} 
-                                    fill={isPdfMode ? '#94a3b8' : '#64748b'} 
-                                    fontSize="9" 
-                                    fontFamily="monospace"
-                                >
-                                    (0, 0)
-                                </text>
-
-                                {/* MUESTRAS (Puntos individuales) */}
-                                {displayedSamples.map((sample) => {
-                                    const cx = scaleX(sample.pc1Scaled);
-                                    const cy = scaleY(sample.pc2Scaled);
-                                    const grp = pca.groups.find(g => g.groupName === sample.group);
-                                    const ptColor = grp ? grp.color : '#0284c7';
-                                    const isHovered = hoveredSample?.id === sample.id;
-
-                                    return (
-                                        <g 
-                                            key={sample.id}
-                                            onMouseEnter={() => setHoveredSample(sample)}
-                                            onMouseLeave={() => setHoveredSample(null)}
-                                            className="cursor-pointer transition-all duration-150"
-                                        >
-                                            <circle
-                                                cx={cx}
-                                                cy={cy}
-                                                r={isHovered ? 8 : 4.5}
-                                                fill={ptColor}
-                                                fillOpacity={isHovered ? 0.95 : 0.65}
-                                                stroke={isHovered ? '#ffffff' : (isPdfMode ? '#ffffff' : '#040d1a')}
-                                                strokeWidth={isHovered ? 2.5 : 1}
-                                            />
-                                        </g>
-                                    );
-                                })}
-
-                                {/* CENTROIDES DE GRUPO (Halos y marcadores) */}
-                                {showCentroids && pca.groups.map(group => {
-                                    const cX = scaleX((group.centroidPc1 / 3.0) * 0.95);
-                                    const cY = scaleY((group.centroidPc2 / 3.0) * 0.95);
-
-                                    return (
-                                        <g key={`centroid-${group.groupName}`}>
-                                            {/* Halo de dispersión */}
-                                            <circle
-                                                cx={cX}
-                                                cy={cY}
-                                                r={Math.min(45, Math.max(12, group.radius * 15))}
-                                                fill={group.color}
-                                                fillOpacity="0.12"
-                                                stroke={group.color}
-                                                strokeWidth="1.5"
-                                                strokeDasharray="3 3"
-                                            />
-                                            {/* Punto central del centroide */}
-                                            <polygon
-                                                points={`${cX},${cY - 7} ${cX + 6},${cY + 5} ${cX - 6},${cY + 5}`}
-                                                fill={group.color}
-                                                stroke="#ffffff"
-                                                strokeWidth="1.5"
-                                            />
-                                            {/* Etiqueta del centroide */}
-                                            <rect
-                                                x={cX + 8}
-                                                y={cY - 12}
-                                                width={group.groupName.length * 6.5 + 10}
-                                                height="18"
-                                                rx="4"
-                                                fill={isPdfMode ? '#ffffff' : '#0f172a'}
-                                                fillOpacity="0.9"
-                                                stroke={group.color}
-                                                strokeWidth="1"
-                                            />
-                                            <text
-                                                x={cX + 13}
-                                                y={cY + 1}
-                                                fill={isPdfMode ? '#0f172a' : '#f8fafc'}
-                                                fontSize="9.5"
-                                                fontWeight="bold"
-                                                fontFamily="sans-serif"
-                                            >
-                                                {group.groupName}
-                                            </text>
-                                        </g>
-                                    );
-                                })}
-
-                                {/* VECTORES DE NUTRIENTES (Flechas) */}
-                                {showVectors && pca.loadings.map(loading => {
-                                    // Escalamiento del vector: magnitude en [-1, 1]
-                                    const targetX = scaleX(loading.pc1Loading);
-                                    const targetY = scaleY(loading.pc2Loading);
-                                    const vectorColor = getPrintContrastingColor(loading.color, isPdfMode);
-                                    const isHovered = hoveredLoading?.key === loading.key;
-
-                                    return (
-                                        <g 
-                                            key={`vector-${loading.key}`}
-                                            onMouseEnter={() => setHoveredLoading(loading)}
-                                            onMouseLeave={() => setHoveredLoading(null)}
-                                            className="cursor-pointer"
-                                        >
-                                            {/* Línea del vector */}
-                                            <line
-                                                x1={centerX}
-                                                y1={centerY}
-                                                x2={targetX}
-                                                y2={targetY}
-                                                stroke={vectorColor}
-                                                strokeWidth={isHovered ? 3.5 : 2}
-                                                strokeLinecap="round"
-                                            />
-                                            {/* Cabeza de flecha */}
-                                            <circle
-                                                cx={targetX}
-                                                cy={targetY}
-                                                r={isHovered ? 5 : 3.5}
-                                                fill={vectorColor}
-                                                stroke="#ffffff"
-                                                strokeWidth="1.5"
-                                            />
-                                            {/* Fondo y etiqueta para legibilidad óptima */}
-                                            <rect
-                                                x={targetX + 6}
-                                                y={targetY - 10}
-                                                width={loading.label.length * 6.8 + 12}
-                                                height="20"
-                                                rx="5"
-                                                fill={isPdfMode ? '#ffffff' : '#091528'}
-                                                fillOpacity="0.92"
-                                                stroke={vectorColor}
-                                                strokeWidth="1"
-                                            />
-                                            <text
-                                                x={targetX + 12}
-                                                y={targetY + 4}
-                                                fill={isPdfMode ? '#0f172a' : '#ffffff'}
-                                                fontSize="10"
-                                                fontWeight="bold"
-                                                fontFamily="sans-serif"
-                                            >
-                                                {loading.label}
-                                            </text>
-                                        </g>
-                                    );
-                                })}
-                            </svg>
-
-                            {/* Tooltip Flotante de Muestra al pasar el cursor */}
-                            {hoveredSample && (
-                                <div 
-                                    className={`absolute z-30 pointer-events-none p-3 rounded-xl shadow-xl border text-xs max-w-xs transition-opacity duration-150 ${
-                                        isPdfMode ? 'bg-white text-slate-800 border-slate-300' : 'bg-slate-900/95 text-slate-100 border-ui-border'
-                                    }`}
-                                    style={{
-                                        top: Math.max(10, Math.min(svgHeight - 180, scaleY(hoveredSample.pc2Scaled) - 100)),
-                                        left: Math.max(10, Math.min(svgWidth - 250, scaleX(hoveredSample.pc1Scaled) + 15))
-                                    }}
-                                >
-                                    <div className="flex items-center justify-between gap-2 border-b border-ui-border/40 pb-1.5 mb-2">
-                                        <span className="font-bold text-ui-accent truncate">
-                                            {hoveredSample.noId || hoveredSample.lote || 'Muestra'}
-                                        </span>
-                                        <span className="text-[10px] text-slate-400">
-                                            {new Date(hoveredSample.date).toLocaleDateString('es-ES')}
-                                        </span>
-                                    </div>
-                                    <div className="space-y-1 text-[11px]">
-                                        <div><strong>{groupField}:</strong> {hoveredSample.group}</div>
-                                        {hoveredSample.subtipo && <div><strong>Subtipo:</strong> {hoveredSample.subtipo}</div>}
-                                        <div className="text-slate-400 pt-1 border-t border-ui-border/30">
-                                            PC1: <span className="text-sky-400 font-mono">{hoveredSample.pc1.toFixed(2)}</span> | 
-                                            PC2: <span className="text-emerald-400 font-mono"> {hoveredSample.pc2.toFixed(2)}</span>
-                                        </div>
-                                    </div>
-                                    <div className="mt-2 pt-1.5 border-t border-ui-border/40 grid grid-cols-2 gap-1 text-[10px]">
-                                        {Object.entries(hoveredSample.values).slice(0, 6).map(([k, v]) => {
-                                            const nConf = NUTRIENTS.find(n => n.key === k);
-                                            const name = nConf ? nConf.label.replace(/\s*\(.*?\)/, '') : k;
-                                            return (
-                                                <div key={k} className="flex justify-between">
-                                                    <span className="text-slate-400">{name}:</span>
-                                                    <span className="font-semibold text-slate-200">{Number(v).toFixed(2)}</span>
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Tooltip de Vector al pasar el cursor */}
-                            {hoveredLoading && (
-                                <div 
-                                    className={`absolute z-30 pointer-events-none p-3 rounded-xl shadow-xl border text-xs max-w-xs ${
-                                        isPdfMode ? 'bg-white text-slate-800 border-slate-300' : 'bg-slate-900/95 text-slate-100 border-ui-border'
-                                    }`}
-                                    style={{
-                                        top: Math.max(10, Math.min(svgHeight - 120, scaleY(hoveredLoading.pc2Loading))),
-                                        left: Math.max(10, Math.min(svgWidth - 250, scaleX(hoveredLoading.pc1Loading) + 20))
-                                    }}
-                                >
-                                    <div className="font-bold text-sm mb-1" style={{ color: hoveredLoading.color }}>
-                                        {hoveredLoading.label}
-                                    </div>
-                                    <div className="space-y-1 text-[11px]">
-                                        <div>Correlación con PC1: <strong className="text-sky-400">{hoveredLoading.pc1Loading}</strong> ({hoveredLoading.contributionPc1}% de contribución)</div>
-                                        <div>Correlación con PC2: <strong className="text-emerald-400">{hoveredLoading.pc2Loading}</strong> ({hoveredLoading.contributionPc2}% de contribución)</div>
-                                        <div>Representación 2D (r²): <strong>{(hoveredLoading.magnitude * 100).toFixed(1)}%</strong></div>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Leyenda de Grupos del Biplot */}
-                        <div className="flex flex-wrap items-center justify-center gap-3 mt-4 pt-3 border-t border-ui-border/40 w-full text-xs">
-                            <span className="text-slate-400 font-bold uppercase tracking-wider text-[10px]">
-                                Leyenda ({groupField}):
-                            </span>
-                            {pca.groups.map(group => (
-                                <button
-                                    key={group.groupName}
-                                    type="button"
-                                    onClick={() => setSelectedGroupFilter(selectedGroupFilter === group.groupName ? 'TODOS' : group.groupName)}
-                                    className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full border transition-all cursor-pointer ${
-                                        selectedGroupFilter === group.groupName 
-                                            ? 'bg-ui-accent/20 border-ui-accent text-white font-bold' 
-                                            : 'border-transparent text-slate-300 hover:border-ui-border'
-                                    }`}
-                                >
-                                    <span className="w-3 h-3 rounded-full" style={{ backgroundColor: group.color }} />
-                                    <span>{group.groupName}</span>
-                                    <span className="text-[10px] text-slate-400 font-mono">({group.sampleCount})</span>
+                                    {tab.label}
                                 </button>
                             ))}
                         </div>
-                    </div>
+                    )}
                 </div>
-            )}
 
-            {/* VISTA 2: COMPARATIVA DETALLADA POR CLIENTE / GRUPO */}
-            {(activeTab === 'clients' || isPdfMode) && (
-                <div className={`p-6 rounded-2xl border ${
-                    isPdfMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-ui-card border-ui-border text-slate-100'
-                }`}>
-                    <div className="flex items-center justify-between pb-4 border-b border-ui-border/40 mb-6">
-                        <div>
-                            <h3 className="text-base font-bold flex items-center space-x-2">
-                                <Users className="w-5 h-5 text-ui-accent" />
-                                <span>Segmentación y Comportamiento por {groupField}</span>
-                            </h3>
-                            <p className={`text-xs ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                Identifica qué clientes reciben lotes con mayor concentración de proteína, grasa o xantofilas, y quiénes tienen mayor dispersión (inestabilidad).
-                            </p>
+                {/* Selector directo: ¿Cómo quieres segregar/agrupar tus datos? */}
+                <div className="pt-5 space-y-4">
+                    <div>
+                        <div className={`text-xs font-semibold mb-2 ${isPdfMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                            1. Elige cómo agrupar y comparar las muestras:
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                            {GROUP_OPTIONS.map(opt => {
+                                const isActive = groupField === opt.id;
+                                const countBadge =
+                                    opt.id === 'Origen' ? dimensionCounts.Origen :
+                                    opt.id === 'Cliente' ? dimensionCounts.Cliente :
+                                    opt.id === 'Proveedor' ? dimensionCounts.Proveedor :
+                                    opt.id === 'subtipo' ? dimensionCounts.subtipo :
+                                    opt.id === 'material' ? dimensionCounts.material : null;
+
+                                return (
+                                    <button
+                                        key={opt.id}
+                                        type="button"
+                                        onClick={() => setGroupField(opt.id)}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer ${
+                                            isActive
+                                                ? (isPdfMode
+                                                    ? 'bg-sky-700 text-white border-sky-700'
+                                                    : 'bg-ui-accent text-[#040d1a] border-ui-accent font-bold')
+                                                : (isPdfMode
+                                                    ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                                                    : 'bg-ui-darkest/80 border-ui-border text-slate-300 hover:border-slate-500')
+                                        }`}
+                                    >
+                                        <span>{opt.label}</span>
+                                        {countBadge !== null && (
+                                            <span className={`ml-1.5 text-[10px] font-mono tabular-nums ${
+                                                isActive
+                                                    ? (isPdfMode ? 'text-sky-100' : 'text-[#040d1a]/80')
+                                                    : mutedTextCls
+                                            }`}>
+                                                ({countBadge})
+                                            </span>
+                                        )}
+                                    </button>
+                                );
+                            })}
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {pca.groups.map(group => {
-                            // Encontrar el cuadrante
-                            const isHighPc1 = group.centroidPc1 > 0;
-                            const isHighPc2 = group.centroidPc2 > 0;
+                    {/* Control de fecha de corte cuando está activo "Antes vs Después" */}
+                    {groupField === 'period_split' && !isPdfMode && (
+                        <div className={`p-3 rounded-xl flex flex-wrap items-center gap-4 ${subtlePanelCls}`}>
+                            <div className="flex items-center gap-2 text-xs font-semibold">
+                                <Calendar className="w-4 h-4 text-ui-accent" />
+                                <span>Dividir historial en dos periodos (Antes vs Desde):</span>
+                            </div>
+                            <div className="w-44">
+                                <DateInputDDMMYYYY
+                                    id="pca-cutoff-date"
+                                    label=""
+                                    value={effectiveCutoffIso}
+                                    onChange={(iso) => setCutoffDateIso(iso)}
+                                />
+                            </div>
+                            {cutoffDateIso && (
+                                <button
+                                    type="button"
+                                    onClick={() => setCutoffDateIso(null)}
+                                    className="text-xs text-ui-accent hover:underline cursor-pointer"
+                                >
+                                    Usar punto medio automático
+                                </button>
+                            )}
+                        </div>
+                    )}
 
-                            return (
-                                <div 
-                                    key={group.groupName}
-                                    className={`p-4 rounded-xl border flex flex-col justify-between transition-all ${
-                                        isPdfMode 
-                                            ? 'bg-slate-50 border-slate-200' 
-                                            : 'bg-ui-darkest/70 border-ui-border hover:border-ui-accent/40'
+                    {/* Barra de sub-filtros cruzados (para combinar p. ej. Origen dentro de un Cliente, o Fechas dentro de un Origen) */}
+                    {!isPdfMode && (localOptions.origenes.length > 1 || localOptions.clientes.length > 1 || localOptions.proveedores.length > 1) && (
+                        <div className="flex flex-wrap items-center gap-3 pt-1">
+                            <span className={`text-xs font-semibold ${mutedTextCls}`}>
+                                2. Enfocar en un subgrupo (opcional):
+                            </span>
+
+                            {localOptions.origenes.length > 1 && groupField !== 'Origen' && (
+                                <select
+                                    value={localFilterOrigen}
+                                    onChange={(e) => setLocalFilterOrigen(e.target.value)}
+                                    aria-label="Filtrar por Origen"
+                                    className={`text-xs py-1.5 px-2.5 rounded-lg border outline-none cursor-pointer ${
+                                        isPdfMode ? 'bg-white border-slate-300 text-slate-800' : 'bg-ui-darkest border-ui-border text-slate-200'
                                     }`}
                                 >
+                                    <option value="TODOS">Todos los Orígenes</option>
+                                    {localOptions.origenes.map(o => (
+                                        <option key={o} value={o}>Origen: {o}</option>
+                                    ))}
+                                </select>
+                            )}
+
+                            {localOptions.clientes.length > 1 && groupField !== 'Cliente' && (
+                                <select
+                                    value={localFilterCliente}
+                                    onChange={(e) => setLocalFilterCliente(e.target.value)}
+                                    aria-label="Filtrar por Cliente"
+                                    className={`text-xs py-1.5 px-2.5 rounded-lg border outline-none cursor-pointer ${
+                                        isPdfMode ? 'bg-white border-slate-300 text-slate-800' : 'bg-ui-darkest border-ui-border text-slate-200'
+                                    }`}
+                                >
+                                    <option value="TODOS">Todos los Clientes</option>
+                                    {localOptions.clientes.map(c => (
+                                        <option key={c} value={c}>Cliente: {c}</option>
+                                    ))}
+                                </select>
+                            )}
+
+                            {localOptions.proveedores.length > 1 && groupField !== 'Proveedor' && (
+                                <select
+                                    value={localFilterProveedor}
+                                    onChange={(e) => setLocalFilterProveedor(e.target.value)}
+                                    aria-label="Filtrar por Proveedor"
+                                    className={`text-xs py-1.5 px-2.5 rounded-lg border outline-none cursor-pointer ${
+                                        isPdfMode ? 'bg-white border-slate-300 text-slate-800' : 'bg-ui-darkest border-ui-border text-slate-200'
+                                    }`}
+                                >
+                                    <option value="TODOS">Todos los Proveedores</option>
+                                    {localOptions.proveedores.map(p => (
+                                        <option key={p} value={p}>Proveedor: {p}</option>
+                                    ))}
+                                </select>
+                            )}
+
+                            {hasLocalFilters && (
+                                <button
+                                    type="button"
+                                    onClick={resetLocalFilters}
+                                    className="text-xs text-ui-accent hover:underline flex items-center gap-1 cursor-pointer"
+                                >
+                                    <RotateCcw className="w-3 h-3" />
+                                    <span>Limpiar enfoque</span>
+                                </button>
+                            )}
+
+                            {/* Botón discreto para ajustar qué parámetros entran al cálculo */}
+                            <button
+                                type="button"
+                                onClick={() => setShowParamSelector(!showParamSelector)}
+                                className={`ml-auto text-xs font-medium px-3 py-1.5 rounded-lg border flex items-center gap-1.5 cursor-pointer transition-colors ${
+                                    isPdfMode
+                                        ? 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                                        : 'bg-ui-darkest border-ui-border text-slate-300 hover:border-ui-accent'
+                                }`}
+                            >
+                                <SlidersHorizontal className="w-3.5 h-3.5" />
+                                <span>Parámetros incluidos ({pca.variableCount})</span>
+                                {showParamSelector ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                            </button>
+                        </div>
+                    )}
+
+                    {/* Selector desplegable de parámetros (oculto por defecto para mantener la vista limpia) */}
+                    {showParamSelector && !isPdfMode && (
+                        <div className={`p-4 rounded-xl space-y-3 ${subtlePanelCls}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                                <span className="text-xs font-semibold">
+                                    Selecciona qué análisis intervienen en la comparación (mínimo 2):
+                                </span>
+                                <div className="flex flex-wrap gap-2 text-xs">
+                                    <button
+                                        type="button"
+                                        onClick={() => applyPreset('core')}
+                                        className="px-2.5 py-1 rounded border border-ui-border hover:border-ui-accent text-slate-300 cursor-pointer"
+                                    >
+                                        Nutrientes principales
+                                    </button>
+                                    {coreNutrientsAvailable.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => applyPreset('all_nutrients')}
+                                            className="px-2.5 py-1 rounded border border-ui-border hover:border-ui-accent text-slate-300 cursor-pointer"
+                                        >
+                                            Todos los nutrientes
+                                        </button>
+                                    )}
+                                    {mycotoxinsAvailable.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => applyPreset('all')}
+                                            className="px-2.5 py-1 rounded border border-ui-border hover:border-ui-accent text-slate-300 cursor-pointer"
+                                        >
+                                            Incluir micotoxinas
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                {nutrientsWithData.map(nutrient => {
+                                    const isSelected = selectedVarKeys.includes(nutrient.key);
+                                    const cleanLabel = nutrient.label.replace(/\s*\(.*?\)/, '');
+                                    const color = getPrintContrastingColor(nutrient.color, isPdfMode);
+                                    return (
+                                        <button
+                                            key={nutrient.key}
+                                            type="button"
+                                            onClick={() => toggleVariable(nutrient.key)}
+                                            className={`px-2.5 py-1 rounded-lg text-xs font-medium flex items-center gap-1.5 border transition-colors cursor-pointer ${
+                                                isSelected
+                                                    ? 'bg-ui-card border-ui-accent text-slate-100'
+                                                    : 'bg-transparent border-ui-border text-slate-500 opacity-70 hover:opacity-100'
+                                            }`}
+                                        >
+                                            <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                                            <span>{cleanLabel}</span>
+                                            {isSelected ? (
+                                                <CheckSquare className="w-3.5 h-3.5 text-ui-accent" />
+                                            ) : (
+                                                <Square className="w-3.5 h-3.5" />
+                                            )}
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* 2. RESUMEN EJECUTIVO PARA TOMA DE DECISIONES */}
+            {(activeSection === 'decision' || isPdfMode) && (
+                <>
+                    <div className={`p-5 md:p-6 rounded-2xl ${cardCls}`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-ui-border/40">
+                            <div>
+                                <h3 className={`text-base font-bold ${headingTextCls}`}>
+                                    ¿Qué muestran tus datos por {activeGroupOptionLabel}?
+                                </h3>
+                                <p className={`text-xs mt-0.5 ${mutedTextCls}`}>
+                                    Lectura automática basada en los promedios reales y separación en el mapa.
+                                </p>
+                            </div>
+                            <span className={`px-3 py-1 rounded-lg border text-xs font-bold self-start sm:self-center ${sepBadgeStyle}`}>
+                                {pca.decisionSummary.separationTitle}
+                            </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 pt-4 text-xs leading-relaxed">
+                            <div>
+                                <div className={`font-bold mb-1 ${isPdfMode ? 'text-sky-800' : 'text-sky-400'}`}>
+                                    1. Diferencia principal entre grupos
+                                </div>
+                                <p className={isPdfMode ? 'text-slate-700' : 'text-slate-300'}>
+                                    {pca.decisionSummary.mainFinding}
+                                </p>
+                            </div>
+
+                            <div>
+                                <div className={`font-bold mb-1 ${isPdfMode ? 'text-emerald-800' : 'text-emerald-400'}`}>
+                                    2. Estabilidad y consistencia
+                                </div>
+                                <p className={isPdfMode ? 'text-slate-700' : 'text-slate-300'}>
+                                    {pca.decisionSummary.stabilityFinding}
+                                </p>
+                            </div>
+
+                            <div>
+                                <div className={`font-bold mb-1 ${isPdfMode ? 'text-amber-800' : 'text-amber-400'}`}>
+                                    3. Comportamiento de nutrientes
+                                </div>
+                                <p className={isPdfMode ? 'text-slate-700' : 'text-slate-300'}>
+                                    {pca.decisionSummary.nutrientFinding}
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className={`mt-4 pt-3 border-t border-ui-border/40 flex items-start gap-2 text-xs ${
+                            isPdfMode ? 'text-slate-700' : 'text-slate-300'
+                        }`}>
+                            <ArrowRight className={`w-4 h-4 shrink-0 mt-0.5 ${isPdfMode ? 'text-sky-700' : 'text-ui-accent'}`} />
+                            <span>
+                                <strong>Sugerencia práctica:</strong> {pca.decisionSummary.recommendation}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* 3. PANEL PRINCIPAL: MAPA VISUAL (IZQ) + AISLAMIENTO DE GRUPOS Y GUÍA (DER) */}
+                    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-stretch">
+                        {/* Mapa Visual Simplificado (8 cols) */}
+                        <div className={`xl:col-span-8 p-5 rounded-2xl flex flex-col ${cardCls}`}>
+                            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-ui-border/40 mb-4">
+                                <div>
+                                    <h3 className={`text-base font-bold ${headingTextCls}`}>
+                                        Mapa de Similitud de Calidad
+                                    </h3>
+                                    <p className={`text-xs ${mutedTextCls}`}>
+                                        Puntos cercanos = calidad similar. Los círculos punteados muestran la zona habitual de cada {activeGroupOptionLabel.toLowerCase()}.
+                                    </p>
+                                </div>
+
+                                {!isPdfMode && (
+                                    <div className="flex flex-wrap items-center gap-2 text-xs">
+                                        <div className="flex p-0.5 rounded-lg bg-ui-darkest border border-ui-border">
+                                            <button
+                                                type="button"
+                                                onClick={() => setMapDensity('all')}
+                                                className={`px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
+                                                    mapDensity === 'all'
+                                                        ? 'bg-ui-accent text-[#040d1a] font-bold'
+                                                        : 'text-slate-300 hover:text-white'
+                                                }`}
+                                            >
+                                                Muestras + Zonas
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setMapDensity('zones')}
+                                                className={`px-2.5 py-1 rounded-md text-xs font-medium cursor-pointer transition-colors ${
+                                                    mapDensity === 'zones'
+                                                        ? 'bg-ui-accent text-[#040d1a] font-bold'
+                                                        : 'text-slate-300 hover:text-white'
+                                                }`}
+                                            >
+                                                Solo Zonas (Limpio)
+                                            </button>
+                                        </div>
+
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowVectors(!showVectors)}
+                                            className={`px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer ${
+                                                showVectors
+                                                    ? 'border-ui-accent text-ui-accent bg-ui-accent/10'
+                                                    : 'border-ui-border text-slate-400 bg-ui-darkest'
+                                            }`}
+                                        >
+                                            {showVectors ? 'Flechas: Sí' : 'Flechas: No'}
+                                        </button>
+
+                                        {mapDensity === 'all' && (
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowSampleLabels(!showSampleLabels)}
+                                                className={`px-2.5 py-1 rounded-lg border text-xs font-medium cursor-pointer ${
+                                                    showSampleLabels
+                                                        ? 'border-ui-accent text-ui-accent bg-ui-accent/10'
+                                                        : 'border-ui-border text-slate-400 bg-ui-darkest'
+                                                }`}
+                                            >
+                                                {showSampleLabels ? 'Lotes: Sí' : 'Lotes: No'}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* SVG Biplot con ejes traducidos a lenguaje real */}
+                            <div className="relative w-full flex-1 flex flex-col justify-center">
+                                <div className="w-full aspect-[820/520] relative">
+                                    <svg
+                                        viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                                        className="w-full h-full select-none"
+                                        style={{
+                                            backgroundColor: isPdfMode ? '#ffffff' : '#040d1a',
+                                            borderRadius: '12px',
+                                            border: isPdfMode ? '1px solid #cbd5e1' : '1px solid rgba(255,255,255,0.08)'
+                                        }}
+                                    >
+                                        {/* Ejes de referencia */}
+                                        <line
+                                            x1={marginX}
+                                            y1={centerY}
+                                            x2={svgWidth - marginX}
+                                            y2={centerY}
+                                            stroke={isPdfMode ? '#cbd5e1' : '#334155'}
+                                            strokeWidth="1.25"
+                                            strokeDasharray="4 4"
+                                        />
+                                        <line
+                                            x1={centerX}
+                                            y1={marginY}
+                                            x2={centerX}
+                                            y2={svgHeight - marginY}
+                                            stroke={isPdfMode ? '#cbd5e1' : '#334155'}
+                                            strokeWidth="1.25"
+                                            strokeDasharray="4 4"
+                                        />
+
+                                        {/* Etiquetas en lenguaje humano en los 4 bordes */}
+                                        {/* Derecha (PC1+) */}
+                                        <text
+                                            x={svgWidth - 16}
+                                            y={centerY - 8}
+                                            textAnchor="end"
+                                            fill={isPdfMode ? '#0369a1' : '#38bdf8'}
+                                            fontSize="11.5"
+                                            fontWeight="bold"
+                                            fontFamily="sans-serif"
+                                        >
+                                            {pca.axisLabels.pc1Positive} →
+                                        </text>
+                                        <text
+                                            x={svgWidth - 16}
+                                            y={centerY + 14}
+                                            textAnchor="end"
+                                            fill={isPdfMode ? '#64748b' : '#64748b'}
+                                            fontSize="9.5"
+                                            fontFamily="monospace"
+                                        >
+                                            Eje 1 ({pca.components[0]?.varianceExplainedPct}%)
+                                        </text>
+
+                                        {/* Izquierda (PC1-) */}
+                                        <text
+                                            x={16}
+                                            y={centerY - 8}
+                                            textAnchor="start"
+                                            fill={isPdfMode ? '#475569' : '#94a3b8'}
+                                            fontSize="11"
+                                            fontWeight="bold"
+                                            fontFamily="sans-serif"
+                                        >
+                                            ← {pca.axisLabels.pc1Negative}
+                                        </text>
+
+                                        {/* Arriba (PC2+) */}
+                                        <text
+                                            x={centerX}
+                                            y={22}
+                                            textAnchor="middle"
+                                            fill={isPdfMode ? '#047857' : '#34d399'}
+                                            fontSize="11.5"
+                                            fontWeight="bold"
+                                            fontFamily="sans-serif"
+                                        >
+                                            ↑ {pca.axisLabels.pc2Positive}
+                                        </text>
+                                        <text
+                                            x={centerX}
+                                            y={36}
+                                            textAnchor="middle"
+                                            fill={isPdfMode ? '#64748b' : '#64748b'}
+                                            fontSize="9.5"
+                                            fontFamily="monospace"
+                                        >
+                                            Eje 2 ({pca.components[1]?.varianceExplainedPct}%)
+                                        </text>
+
+                                        {/* Abajo (PC2-) */}
+                                        <text
+                                            x={centerX}
+                                            y={svgHeight - 16}
+                                            textAnchor="middle"
+                                            fill={isPdfMode ? '#475569' : '#94a3b8'}
+                                            fontSize="11"
+                                            fontWeight="bold"
+                                            fontFamily="sans-serif"
+                                        >
+                                            ↓ {pca.axisLabels.pc2Negative}
+                                        </text>
+
+                                        {/* Centro promedio */}
+                                        <circle cx={centerX} cy={centerY} r="3.5" fill={isPdfMode ? '#64748b' : '#94a3b8'} />
+                                        <text
+                                            x={centerX + 6}
+                                            y={centerY + 13}
+                                            fill={isPdfMode ? '#64748b' : '#64748b'}
+                                            fontSize="9"
+                                            fontFamily="sans-serif"
+                                        >
+                                            Promedio General
+                                        </text>
+
+                                        {/* ZONAS DE GRUPO (Halos) */}
+                                        {visibleGroups.map(group => {
+                                            const cX = scaleX(group.centroidPc1Scaled);
+                                            const cY = scaleY(group.centroidPc2Scaled);
+                                            const radPx = scaleRadius(group.radiusScaled);
+                                            const gColor = getPrintContrastingColor(group.color, isPdfMode);
+
+                                            return (
+                                                <g key={`zone-${group.groupName}`}>
+                                                    <circle
+                                                        cx={cX}
+                                                        cy={cY}
+                                                        r={radPx}
+                                                        fill={gColor}
+                                                        fillOpacity={mapDensity === 'zones' ? 0.16 : 0.08}
+                                                        stroke={gColor}
+                                                        strokeWidth={mapDensity === 'zones' ? 2 : 1.3}
+                                                        strokeDasharray="4 3"
+                                                    />
+                                                </g>
+                                            );
+                                        })}
+
+                                        {/* MUESTRAS INDIVIDUALES */}
+                                        {mapDensity === 'all' && visibleSamples.map(sample => {
+                                            const cx = scaleX(sample.pc1Scaled);
+                                            const cy = scaleY(sample.pc2Scaled);
+                                            const grp = pca.groups.find(g => g.groupName === sample.group);
+                                            const ptColor = getPrintContrastingColor(grp?.color || '#0284c7', isPdfMode);
+                                            const isHovered = hoveredSample?.id === sample.id;
+
+                                            return (
+                                                <g
+                                                    key={sample.id}
+                                                    onMouseEnter={() => setHoveredSample(sample)}
+                                                    onMouseLeave={() => setHoveredSample(null)}
+                                                    className="cursor-pointer"
+                                                >
+                                                    <circle
+                                                        cx={cx}
+                                                        cy={cy}
+                                                        r={isHovered ? 7.5 : 4.2}
+                                                        fill={ptColor}
+                                                        fillOpacity={isHovered ? 1 : 0.72}
+                                                        stroke={isHovered ? (isPdfMode ? '#0f172a' : '#ffffff') : (isPdfMode ? '#ffffff' : '#040d1a')}
+                                                        strokeWidth={isHovered ? 2 : 0.9}
+                                                    />
+                                                    {showSampleLabels && (sample.lote || sample.noId) && (
+                                                        <text
+                                                            x={cx + 6}
+                                                            y={cy + 3}
+                                                            fontSize="8.5"
+                                                            fontFamily="monospace"
+                                                            fill={isPdfMode ? '#334155' : '#cbd5e1'}
+                                                        >
+                                                            {sample.lote || sample.noId}
+                                                        </text>
+                                                    )}
+                                                </g>
+                                            );
+                                        })}
+
+                                        {/* VECTORES DE NUTRIENTES (Flechas) */}
+                                        {showVectors && pca.loadings.map(loading => {
+                                            // Escalar flecha hasta ~0.88 del dominio para mantenerse dentro de las etiquetas
+                                            const targetX = scaleX(loading.pc1Loading * 0.9);
+                                            const targetY = scaleY(loading.pc2Loading * 0.9);
+                                            const vectorColor = getPrintContrastingColor(loading.color, isPdfMode);
+                                            const isHovered = hoveredLoading?.key === loading.key;
+                                            const isRightSide = loading.pc1Loading >= 0;
+                                            const labelText = loading.label;
+                                            const boxWidth = labelText.length * 6.4 + 14;
+                                            const boxX = isRightSide
+                                                ? Math.min(svgWidth - marginX - boxWidth + 20, targetX + 8)
+                                                : Math.max(marginX - 20, targetX - boxWidth - 8);
+                                            const boxY = Math.max(marginY - 6, Math.min(svgHeight - marginY - 18, targetY - 10));
+
+                                            return (
+                                                <g
+                                                    key={`vector-${loading.key}`}
+                                                    onMouseEnter={() => setHoveredLoading(loading)}
+                                                    onMouseLeave={() => setHoveredLoading(null)}
+                                                    className="cursor-pointer"
+                                                >
+                                                    <line
+                                                        x1={centerX}
+                                                        y1={centerY}
+                                                        x2={targetX}
+                                                        y2={targetY}
+                                                        stroke={vectorColor}
+                                                        strokeWidth={isHovered ? 3.2 : 1.9}
+                                                        strokeOpacity={0.85}
+                                                        strokeLinecap="round"
+                                                    />
+                                                    <circle
+                                                        cx={targetX}
+                                                        cy={targetY}
+                                                        r={isHovered ? 4.8 : 3.2}
+                                                        fill={vectorColor}
+                                                        stroke={isPdfMode ? '#ffffff' : '#040d1a'}
+                                                        strokeWidth="1.2"
+                                                    />
+                                                    <rect
+                                                        x={boxX}
+                                                        y={boxY}
+                                                        width={boxWidth}
+                                                        height="19"
+                                                        rx="4"
+                                                        fill={isPdfMode ? '#ffffff' : '#091528'}
+                                                        fillOpacity="0.92"
+                                                        stroke={vectorColor}
+                                                        strokeWidth="1"
+                                                    />
+                                                    <text
+                                                        x={boxX + 7}
+                                                        y={boxY + 13}
+                                                        fill={isPdfMode ? '#0f172a' : '#f8fafc'}
+                                                        fontSize="10"
+                                                        fontWeight="bold"
+                                                        fontFamily="sans-serif"
+                                                    >
+                                                        {labelText}
+                                                    </text>
+                                                </g>
+                                            );
+                                        })}
+
+                                        {/* CENTROIDES Y ETIQUETAS DE GRUPO (encima para máxima claridad) */}
+                                        {visibleGroups.map(group => {
+                                            const cX = scaleX(group.centroidPc1Scaled);
+                                            const cY = scaleY(group.centroidPc2Scaled);
+                                            const gColor = getPrintContrastingColor(group.color, isPdfMode);
+                                            const labelText = `${group.groupName} (${group.sampleCount})`;
+                                            const boxW = Math.min(180, labelText.length * 6.3 + 14);
+                                            const boxX = Math.max(marginX, Math.min(svgWidth - marginX - boxW, cX + 10));
+                                            const boxY = Math.max(marginY, Math.min(svgHeight - marginY - 22, cY - 12));
+
+                                            return (
+                                                <g key={`centroid-${group.groupName}`}>
+                                                    <polygon
+                                                        points={`${cX},${cY - 8} ${cX + 7},${cY + 5} ${cX - 7},${cY + 5}`}
+                                                        fill={gColor}
+                                                        stroke="#ffffff"
+                                                        strokeWidth="1.5"
+                                                    />
+                                                    <rect
+                                                        x={boxX}
+                                                        y={boxY}
+                                                        width={boxW}
+                                                        height="20"
+                                                        rx="5"
+                                                        fill={isPdfMode ? '#ffffff' : '#0f172a'}
+                                                        fillOpacity="0.95"
+                                                        stroke={gColor}
+                                                        strokeWidth="1.4"
+                                                    />
+                                                    <text
+                                                        x={boxX + 7}
+                                                        y={boxY + 13.5}
+                                                        fill={isPdfMode ? '#0f172a' : '#ffffff'}
+                                                        fontSize="10"
+                                                        fontWeight="bold"
+                                                        fontFamily="sans-serif"
+                                                    >
+                                                        {labelText.length > 26 ? `${labelText.slice(0, 24)}…` : labelText}
+                                                    </text>
+                                                </g>
+                                            );
+                                        })}
+                                    </svg>
+
+                                    {/* Tooltip de Muestra */}
+                                    {hoveredSample && (
+                                        <div
+                                            className={`absolute z-30 pointer-events-none p-3 rounded-xl shadow-xl border text-xs w-64 ${
+                                                isPdfMode ? 'bg-white text-slate-800 border-slate-300' : 'bg-slate-900/95 text-slate-100 border-ui-border'
+                                            }`}
+                                            style={{
+                                                top: '12px',
+                                                left: hoveredSample.pc1Scaled > 0 ? '12px' : undefined,
+                                                right: hoveredSample.pc1Scaled <= 0 ? '12px' : undefined
+                                            }}
+                                        >
+                                            <div className="flex items-center justify-between border-b border-ui-border/40 pb-1.5 mb-2">
+                                                <span className="font-bold text-ui-accent truncate">
+                                                    {hoveredSample.lote || hoveredSample.noId || 'Muestra'}
+                                                </span>
+                                                <span className={`text-[11px] font-mono tabular-nums ${mutedTextCls}`}>
+                                                    {hoveredSample.formattedDate}
+                                                </span>
+                                            </div>
+                                            <div className="space-y-0.5 text-[11px] mb-2">
+                                                <div><strong>{activeGroupOptionLabel}:</strong> {hoveredSample.group}</div>
+                                                {hoveredSample.origen && groupField !== 'Origen' && (
+                                                    <div><strong>Origen:</strong> {hoveredSample.origen}</div>
+                                                )}
+                                                {hoveredSample.cliente && groupField !== 'Cliente' && (
+                                                    <div><strong>Cliente:</strong> {hoveredSample.cliente}</div>
+                                                )}
+                                                {hoveredSample.proveedor && groupField !== 'Proveedor' && (
+                                                    <div><strong>Proveedor:</strong> {hoveredSample.proveedor}</div>
+                                                )}
+                                            </div>
+                                            <div className="pt-1.5 border-t border-ui-border/40 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                                                {Object.entries(hoveredSample.values).slice(0, 8).map(([k, v]) => {
+                                                    const vConf = pca.variables.find(x => x.key === k);
+                                                    return (
+                                                        <div key={k} className="flex justify-between gap-1">
+                                                            <span className={mutedTextCls}>{vConf?.label || k}:</span>
+                                                            <span className="font-mono tabular-nums font-semibold">
+                                                                {formatMetric(Number(v))}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Tooltip de Flecha */}
+                                    {hoveredLoading && (
+                                        <div
+                                            className={`absolute z-30 pointer-events-none p-3 rounded-xl shadow-xl border text-xs w-60 bottom-4 left-4 ${
+                                                isPdfMode ? 'bg-white text-slate-800 border-slate-300' : 'bg-slate-900/95 text-slate-100 border-ui-border'
+                                            }`}
+                                        >
+                                            <div className="font-bold text-sm mb-1" style={{ color: getPrintContrastingColor(hoveredLoading.color, isPdfMode) }}>
+                                                {hoveredLoading.label} {hoveredLoading.unit ? `(${hoveredLoading.unit})` : ''}
+                                            </div>
+                                            <p className={`text-[11px] leading-snug ${mutedTextCls}`}>
+                                                Las muestras ubicadas en la dirección de esta flecha tienen valores más altos de <strong>{hoveredLoading.label}</strong>.
+                                            </p>
+                                            <div className="mt-1.5 pt-1.5 border-t border-ui-border/30 text-[11px] font-mono tabular-nums">
+                                                Influencia en el mapa: {(hoveredLoading.magnitude * 100).toFixed(0)}%
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Panel Derecho: Segregación Rápida por Grupos + Guía Rápida (4 cols) */}
+                        <div className={`xl:col-span-4 p-5 rounded-2xl flex flex-col justify-between gap-4 ${cardCls}`}>
+                            <div>
+                                <div className="flex items-center justify-between pb-3 border-b border-ui-border/40 mb-3">
                                     <div>
-                                        <div className="flex items-center justify-between gap-2 mb-2">
-                                            <div className="flex items-center space-x-2 truncate">
-                                                <span 
-                                                    className="w-3.5 h-3.5 rounded-full shrink-0" 
-                                                    style={{ backgroundColor: group.color }} 
-                                                />
-                                                <h4 className="font-bold text-sm text-slate-100 truncate">
-                                                    {group.groupName}
-                                                </h4>
-                                            </div>
-                                            <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
-                                                isPdfMode ? 'bg-white text-slate-700 border' : 'bg-ui-card text-ui-accent border border-ui-border'
-                                            }`}>
-                                                {group.sampleCount} Muestras
-                                            </span>
-                                        </div>
-
-                                        <p className="text-xs text-slate-300 leading-relaxed mb-4">
-                                            {group.description}
+                                        <h3 className={`text-sm font-bold ${headingTextCls}`}>
+                                            Grupos ({pca.groups.length})
+                                        </h3>
+                                        <p className={`text-[11px] ${mutedTextCls}`}>
+                                            Activa o aísla grupos para comparar sin ruido.
                                         </p>
+                                    </div>
+                                    {hiddenGroups.length > 0 && !isPdfMode && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setHiddenGroups([])}
+                                            className="text-xs font-semibold text-ui-accent hover:underline cursor-pointer"
+                                        >
+                                            Ver todos
+                                        </button>
+                                    )}
+                                </div>
 
-                                        {/* Coordenadas del Centroide */}
-                                        <div className="grid grid-cols-2 gap-2 text-xs font-mono p-2.5 rounded-lg bg-ui-card/50 border border-ui-border/40 mb-3">
-                                            <div>
-                                                <span className="text-[10px] text-slate-400 block font-sans">Centroide PC1</span>
-                                                <span className={group.centroidPc1 >= 0 ? 'text-sky-400 font-bold' : 'text-rose-400 font-bold'}>
-                                                    {group.centroidPc1 > 0 ? `+${group.centroidPc1}` : group.centroidPc1}
-                                                </span>
+                                <div className="space-y-2 max-h-[360px] overflow-y-auto pr-1">
+                                    {pca.groups.map(group => {
+                                        const isHidden = hiddenGroups.includes(group.groupName);
+                                        const gColor = getPrintContrastingColor(group.color, isPdfMode);
+
+                                        return (
+                                            <div
+                                                key={group.groupName}
+                                                className={`p-3 rounded-xl border transition-opacity ${
+                                                    isHidden ? 'opacity-45' : 'opacity-100'
+                                                } ${
+                                                    isPdfMode
+                                                        ? 'bg-slate-50 border-slate-200'
+                                                        : 'bg-ui-darkest/60 border-ui-border'
+                                                }`}
+                                            >
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <div className="flex items-center gap-2 min-w-0">
+                                                        <span
+                                                            className="w-3 h-3 rounded-full shrink-0"
+                                                            style={{ backgroundColor: gColor }}
+                                                        />
+                                                        <span className={`text-xs font-bold truncate ${headingTextCls}`}>
+                                                            {group.groupName}
+                                                        </span>
+                                                    </div>
+
+                                                    {!isPdfMode && (
+                                                        <div className="flex items-center gap-1.5 shrink-0">
+                                                            {pca.groups.length > 2 && (
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={() => isolateGroup(group.groupName)}
+                                                                    className="text-[10px] px-1.5 py-0.5 rounded border border-ui-border text-slate-400 hover:text-ui-accent hover:border-ui-accent cursor-pointer"
+                                                                    title="Ver solo este grupo"
+                                                                >
+                                                                    Aislar
+                                                                </button>
+                                                            )}
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => toggleGroupVisibility(group.groupName)}
+                                                                className="p-1 text-slate-400 hover:text-white cursor-pointer"
+                                                                title={isHidden ? 'Mostrar en mapa' : 'Ocultar del mapa'}
+                                                            >
+                                                                {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                                                            </button>
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                <div className={`flex items-center gap-2 text-[11px] mt-1 ${mutedTextCls}`}>
+                                                    <span className="font-mono tabular-nums">{group.sampleCount} muestras</span>
+                                                    <span aria-hidden="true">·</span>
+                                                    <span className={
+                                                        group.stabilityLabel === 'Muy Estable'
+                                                            ? (isPdfMode ? 'text-emerald-700 font-semibold' : 'text-emerald-400 font-semibold')
+                                                            : group.stabilityLabel === 'Estabilidad Moderada'
+                                                            ? (isPdfMode ? 'text-amber-700 font-semibold' : 'text-amber-400 font-semibold')
+                                                            : (isPdfMode ? 'text-rose-700 font-semibold' : 'text-rose-400 font-semibold')
+                                                    }>
+                                                        {group.stabilityLabel}
+                                                    </span>
+                                                </div>
+
+                                                <p className={`text-[11px] mt-1.5 leading-snug ${isPdfMode ? 'text-slate-700' : 'text-slate-300'}`}>
+                                                    {group.description}
+                                                </p>
                                             </div>
-                                            <div>
-                                                <span className="text-[10px] text-slate-400 block font-sans">Centroide PC2</span>
-                                                <span className={group.centroidPc2 >= 0 ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                                                    {group.centroidPc2 > 0 ? `+${group.centroidPc2}` : group.centroidPc2}
-                                                </span>
-                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Guía mínima de 3 reglas para leer el mapa */}
+                            <div className={`p-3.5 rounded-xl text-[11px] space-y-1.5 ${subtlePanelCls}`}>
+                                <div className="font-bold flex items-center gap-1.5">
+                                    <Info className="w-3.5 h-3.5 text-ui-accent" />
+                                    <span>Cómo leer este mapa en 10 segundos</span>
+                                </div>
+                                <p className={mutedTextCls}>
+                                    <strong>1. Zonas separadas:</strong> Significa que esos grupos realmente tienen composición distinta.
+                                </p>
+                                <p className={mutedTextCls}>
+                                    <strong>2. Dirección de flechas:</strong> Grupos cargados hacia una flecha tienen más de ese nutriente.
+                                </p>
+                                <p className={mutedTextCls}>
+                                    <strong>3. Tamaño del círculo:</strong> Círculo pequeño = lotes parejos; círculo grande = calidad irregular.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* 4. TABLA DE PROMEDIOS REALES POR GRUPO (EL PUENTE HACIA LA DECISIÓN) */}
+                    <div className={`p-5 md:p-6 rounded-2xl ${cardCls}`}>
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-ui-border/40 mb-4">
+                            <div>
+                                <h3 className={`text-base font-bold ${headingTextCls}`}>
+                                    Valores Reales de Laboratorio por {activeGroupOptionLabel}
+                                </h3>
+                                <p className={`text-xs mt-0.5 ${mutedTextCls}`}>
+                                    Promedios reales de cada parámetro y su diferencia (%) frente al promedio general del periodo filtrado.
+                                </p>
+                            </div>
+                            <span className={`text-xs font-mono tabular-nums ${mutedTextCls}`}>
+                                Mostrando {visibleGroups.length} de {pca.groups.length} grupos
+                            </span>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left border-collapse">
+                                <thead>
+                                    <tr className={`border-b ${
+                                        isPdfMode ? 'border-slate-200 bg-slate-50 text-slate-700' : 'border-ui-border bg-ui-darkest/70 text-slate-300'
+                                    }`}>
+                                        <th className="py-2.5 px-3 font-bold whitespace-nowrap">{activeGroupOptionLabel}</th>
+                                        <th className="py-2.5 px-3 font-bold text-right whitespace-nowrap">Muestras</th>
+                                        <th className="py-2.5 px-3 font-bold whitespace-nowrap">Consistencia</th>
+                                        {pca.variables.map(v => (
+                                            <th key={v.key} className="py-2.5 px-3 font-bold text-right whitespace-nowrap">
+                                                {v.label} {v.unit ? `(${v.unit})` : ''}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-ui-border/30">
+                                    {/* Fila de Promedio General de Referencia */}
+                                    <tr className={isPdfMode ? 'bg-sky-50/50 font-semibold' : 'bg-ui-darkest/40 font-semibold'}>
+                                        <td className={`py-2.5 px-3 whitespace-nowrap ${isPdfMode ? 'text-sky-900' : 'text-ui-accent'}`}>
+                                            Promedio General ({selectedMaterial})
+                                        </td>
+                                        <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                                            {pca.sampleCount}
+                                        </td>
+                                        <td className={`py-2.5 px-3 ${mutedTextCls}`}>Referencia base</td>
+                                        {pca.variables.map(v => (
+                                            <td key={v.key} className="py-2.5 px-3 text-right font-mono tabular-nums">
+                                                {formatMetric(v.mean)}
+                                            </td>
+                                        ))}
+                                    </tr>
+
+                                    {/* Filas por Grupo */}
+                                    {visibleGroups.map(group => {
+                                        const gColor = getPrintContrastingColor(group.color, isPdfMode);
+                                        return (
+                                            <tr
+                                                key={group.groupName}
+                                                className={isPdfMode ? 'hover:bg-slate-50' : 'hover:bg-ui-darkest/30'}
+                                            >
+                                                <td className="py-2.5 px-3 font-bold whitespace-nowrap">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: gColor }} />
+                                                        <span className={headingTextCls}>{group.groupName}</span>
+                                                    </div>
+                                                </td>
+                                                <td className="py-2.5 px-3 text-right font-mono tabular-nums">
+                                                    {group.sampleCount}
+                                                </td>
+                                                <td className="py-2.5 px-3 whitespace-nowrap">
+                                                    <span className={`font-semibold ${
+                                                        group.stabilityLabel === 'Muy Estable'
+                                                            ? (isPdfMode ? 'text-emerald-700' : 'text-emerald-400')
+                                                            : group.stabilityLabel === 'Estabilidad Moderada'
+                                                            ? (isPdfMode ? 'text-amber-700' : 'text-amber-400')
+                                                            : (isPdfMode ? 'text-rose-700' : 'text-rose-400')
+                                                    }`}>
+                                                        {group.stabilityLabel}
+                                                    </span>
+                                                </td>
+                                                {pca.variables.map(v => {
+                                                    const stat = group.variableStats[v.key];
+                                                    if (!stat || stat.mean === null) {
+                                                        return (
+                                                            <td key={v.key} className={`py-2.5 px-3 text-right font-mono ${mutedTextCls}`}>
+                                                                —
+                                                            </td>
+                                                        );
+                                                    }
+                                                    const isDiffNotable = Math.abs(stat.diffVsGlobalPct) >= 3;
+                                                    const diffColor = stat.diffVsGlobalPct > 0
+                                                        ? (isPdfMode ? 'text-emerald-700' : 'text-emerald-400')
+                                                        : (isPdfMode ? 'text-rose-700' : 'text-rose-400');
+
+                                                    return (
+                                                        <td key={v.key} className="py-2.5 px-3 text-right font-mono tabular-nums whitespace-nowrap">
+                                                            <span className="font-bold">{formatMetric(stat.mean)}</span>
+                                                            {isDiffNotable && (
+                                                                <span className={`ml-1.5 text-[10px] ${diffColor}`}>
+                                                                    ({stat.diffVsGlobalPct > 0 ? `+${stat.diffVsGlobalPct}%` : `${stat.diffVsGlobalPct}%`})
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                    );
+                                                })}
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </>
+            )}
+
+            {/* 5. RELACIONES ENTRE NUTRIENTES (CORRELACIONES EN ESPAÑOL + MATRIZ) */}
+            {(activeSection === 'relations' || isPdfMode) && (
+                <div className={`p-5 md:p-6 rounded-2xl space-y-6 ${cardCls}`}>
+                    <div className="border-b border-ui-border/40 pb-4">
+                        <h3 className={`text-base font-bold flex items-center gap-2 ${headingTextCls}`}>
+                            <Layers className="w-5 h-5 text-ui-accent" />
+                            <span>¿Qué nutrientes suben o bajan juntos?</span>
+                        </h3>
+                        <p className={`text-xs mt-0.5 ${mutedTextCls}`}>
+                            Relaciones detectadas automáticamente en el historial analítico seleccionado.
+                        </p>
+                    </div>
+
+                    {/* Hallazgos traducidos */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        {pca.topCorrelations.slice(0, 6).map((c, idx) => {
+                            const absR = Math.abs(c.correlation);
+                            const isPos = c.correlation > 0;
+                            const strength = absR >= 0.7 ? 'Muy fuerte' : absR >= 0.45 ? 'Moderada' : 'Leve';
+                            return (
+                                <div key={idx} className={`p-3.5 rounded-xl flex items-center justify-between gap-3 ${subtlePanelCls}`}>
+                                    <div>
+                                        <div className={`font-bold ${headingTextCls}`}>
+                                            {c.var1Label} y {c.var2Label}
+                                        </div>
+                                        <div className={`text-[11px] mt-0.5 ${mutedTextCls}`}>
+                                            {absR < 0.25
+                                                ? 'Comportamiento independiente entre sí'
+                                                : isPos
+                                                ? `Relación directa (${strength}): suben juntas`
+                                                : `Relación inversa (${strength}): cuando una sube, la otra baja`}
                                         </div>
                                     </div>
-
-                                    {/* Indicador de Homogeneidad / Dispersión */}
-                                    <div className="pt-2 border-t border-ui-border/30 flex items-center justify-between text-[11px]">
-                                        <span className="text-slate-400">Variabilidad interna:</span>
-                                        <span className={`font-semibold ${
-                                            group.radius < 1.0 ? 'text-emerald-400' : group.radius < 1.8 ? 'text-amber-400' : 'text-rose-400'
-                                        }`}>
-                                            {group.radius < 1.0 ? 'Muy Homogéneo' : group.radius < 1.8 ? 'Variabilidad Moderada' : 'Alta Dispersión'} 
-                                            <span className="text-[10px] text-slate-500 font-mono ml-1">(σ={group.radius})</span>
-                                        </span>
-                                    </div>
+                                    <span className={`font-mono tabular-nums font-bold px-2.5 py-1 rounded-lg border shrink-0 ${
+                                        absR < 0.25
+                                            ? (isPdfMode ? 'bg-white border-slate-300 text-slate-600' : 'bg-ui-card border-ui-border text-slate-400')
+                                            : isPos
+                                            ? (isPdfMode ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-emerald-950/60 border-emerald-700/50 text-emerald-300')
+                                            : (isPdfMode ? 'bg-rose-50 border-rose-200 text-rose-800' : 'bg-rose-950/60 border-rose-700/50 text-rose-300')
+                                    }`}>
+                                        r = {c.correlation > 0 ? `+${c.correlation.toFixed(2)}` : c.correlation.toFixed(2)}
+                                    </span>
                                 </div>
                             );
                         })}
                     </div>
 
-                    {/* Resumen Automático de Conclusiones */}
-                    <div className={`mt-6 p-4 rounded-xl border ${
-                        isPdfMode ? 'bg-sky-50/70 border-sky-200 text-slate-800' : 'bg-ui-darkest border-ui-border text-slate-200'
-                    }`}>
-                        <div className="flex items-start space-x-2.5">
-                            <Sparkles className="w-4 h-4 text-ui-accent shrink-0 mt-0.5" />
-                            <div className="space-y-1 text-xs">
-                                <strong className="text-slate-100 font-bold block">Conclusiones del agrupamiento:</strong>
-                                {pca.interpretation.groupInsights.map((insight, idx) => (
-                                    <p key={idx} className="leading-relaxed text-slate-300">
-                                        • {insight}
-                                    </p>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* VISTA 3: CARGAS FACTORIALES (LOADINGS) */}
-            {(activeTab === 'loadings' || isPdfMode) && (
-                <div className={`p-6 rounded-2xl border ${
-                    isPdfMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-ui-card border-ui-border text-slate-100'
-                }`}>
-                    <div className="flex items-center justify-between pb-4 border-b border-ui-border/40 mb-4">
-                        <div>
-                            <h3 className="text-base font-bold flex items-center space-x-2">
-                                <Table className="w-5 h-5 text-ui-accent" />
-                                <span>Cargas Factoriales (Loadings) y Calidad de Representación</span>
-                            </h3>
-                            <p className={`text-xs ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                Correlación directa entre cada variable original y los componentes principales PC1 y PC2.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left border-collapse">
-                            <thead>
-                                <tr className={`border-b ${isPdfMode ? 'border-slate-200 text-slate-600 bg-slate-50' : 'border-ui-border/60 text-slate-400 bg-ui-darkest/60'}`}>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider">Nutriente</th>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-right">Carga en PC1</th>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-right">Contrib. PC1 (%)</th>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-right">Carga en PC2</th>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-right">Contrib. PC2 (%)</th>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-right">Calidad 2D (r²)</th>
-                                    <th className="py-2.5 px-3 font-bold uppercase tracking-wider text-center">Interpretación</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-ui-border/30">
-                                {pca.loadings.map(loading => {
-                                    const contrastColor = getPrintContrastingColor(loading.color, isPdfMode);
-                                    return (
-                                        <tr key={loading.key} className={isPdfMode ? 'hover:bg-slate-50' : 'hover:bg-ui-darkest/40'}>
-                                            <td className="py-2.5 px-3 font-bold flex items-center space-x-2">
-                                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: contrastColor }} />
-                                                <span>{loading.label}</span>
-                                            </td>
-                                            <td className={`py-2.5 px-3 text-right font-mono font-bold ${
-                                                loading.pc1Loading > 0.4 ? 'text-sky-400' : loading.pc1Loading < -0.4 ? 'text-rose-400' : 'text-slate-400'
-                                            }`}>
-                                                {loading.pc1Loading > 0 ? `+${loading.pc1Loading}` : loading.pc1Loading}
-                                            </td>
-                                            <td className="py-2.5 px-3 text-right font-mono text-slate-300">
-                                                {loading.contributionPc1}%
-                                            </td>
-                                            <td className={`py-2.5 px-3 text-right font-mono font-bold ${
-                                                loading.pc2Loading > 0.4 ? 'text-emerald-400' : loading.pc2Loading < -0.4 ? 'text-amber-400' : 'text-slate-400'
-                                            }`}>
-                                                {loading.pc2Loading > 0 ? `+${loading.pc2Loading}` : loading.pc2Loading}
-                                            </td>
-                                            <td className="py-2.5 px-3 text-right font-mono text-slate-300">
-                                                {loading.contributionPc2}%
-                                            </td>
-                                            <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-200">
-                                                {(loading.magnitude * 100).toFixed(1)}%
-                                            </td>
-                                            <td className="py-2.5 px-3 text-center text-[11px] text-slate-300">
-                                                {Math.abs(loading.pc1Loading) > Math.abs(loading.pc2Loading) ? (
-                                                    <span className="px-2 py-0.5 rounded bg-sky-950/60 text-sky-300 border border-sky-800/40">
-                                                        Define el Eje Horizontal (PC1)
-                                                    </span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-800/40">
-                                                        Define el Eje Vertical (PC2)
-                                                    </span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            )}
-
-            {/* VISTA 4: MATRIZ DE CORRELACIÓN INTERACTIVA */}
-            {(activeTab === 'correlation' || isPdfMode) && (
-                <div className={`p-6 rounded-2xl border ${
-                    isPdfMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-ui-card border-ui-border text-slate-100'
-                }`}>
-                    <div className="flex items-center justify-between pb-4 border-b border-ui-border/40 mb-4">
-                        <div>
-                            <h3 className="text-base font-bold flex items-center space-x-2">
-                                <Layers className="w-5 h-5 text-ui-accent" />
-                                <span>Matriz de Correlación de Pearson (r)</span>
-                            </h3>
-                            <p className={`text-xs ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                Mide el grado de asociación lineal entre pares de nutrientes. +1.0 indica correlación perfecta directa, -1.0 correlación inversa.
-                            </p>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto">
+                    {/* Matriz de Correlación de Pearson */}
+                    <div className="overflow-x-auto pt-2">
                         <table className="text-xs border-collapse mx-auto">
                             <thead>
                                 <tr>
                                     <th className="p-2"></th>
                                     {pca.variableLabels.map(label => (
-                                        <th key={label} className="p-2 font-bold text-center text-[11px] text-slate-300">
+                                        <th key={label} className={`p-2 font-bold text-center text-[11px] ${mutedTextCls}`}>
                                             {label}
                                         </th>
                                     ))}
@@ -1033,38 +1396,39 @@ export const PcaAnalysisView: React.FC<PcaAnalysisViewProps> = ({
                             <tbody>
                                 {pca.variableLabels.map((rowLabel, rIdx) => (
                                     <tr key={rowLabel}>
-                                        <td className="p-2 font-bold text-right text-[11px] text-slate-300 whitespace-nowrap">
+                                        <td className={`p-2 font-bold text-right text-[11px] whitespace-nowrap ${mutedTextCls}`}>
                                             {rowLabel}
                                         </td>
                                         {pca.variableLabels.map((colLabel, cIdx) => {
                                             const corr = pca.correlationMatrix[rIdx]?.[cIdx] ?? 0;
                                             const isDiag = rIdx === cIdx;
 
-                                            // Coloreado según correlación
                                             let bgColor = 'transparent';
-                                            let textColor = '#ffffff';
+                                            let textColor = isPdfMode ? '#334155' : '#cbd5e1';
 
                                             if (isDiag) {
                                                 bgColor = isPdfMode ? '#f1f5f9' : '#1e293b';
-                                                textColor = isPdfMode ? '#0f172a' : '#94a3b8';
+                                                textColor = isPdfMode ? '#64748b' : '#94a3b8';
                                             } else if (corr > 0.6) {
-                                                bgColor = isPdfMode ? '#dcfce7' : 'rgba(16, 185, 129, 0.4)';
+                                                bgColor = isPdfMode ? '#dcfce7' : 'rgba(16, 185, 129, 0.35)';
                                                 textColor = isPdfMode ? '#166534' : '#6ee7b7';
                                             } else if (corr > 0.25) {
-                                                bgColor = isPdfMode ? '#e0f2fe' : 'rgba(2, 132, 199, 0.3)';
+                                                bgColor = isPdfMode ? '#e0f2fe' : 'rgba(2, 132, 199, 0.28)';
                                                 textColor = isPdfMode ? '#075985' : '#7dd3fc';
                                             } else if (corr < -0.6) {
-                                                bgColor = isPdfMode ? '#ffe4e6' : 'rgba(244, 63, 94, 0.4)';
+                                                bgColor = isPdfMode ? '#ffe4e6' : 'rgba(244, 63, 94, 0.35)';
                                                 textColor = isPdfMode ? '#9f1239' : '#fda4af';
                                             } else if (corr < -0.25) {
-                                                bgColor = isPdfMode ? '#ffedd5' : 'rgba(249, 115, 22, 0.3)';
+                                                bgColor = isPdfMode ? '#ffedd5' : 'rgba(249, 115, 22, 0.28)';
                                                 textColor = isPdfMode ? '#9a3412' : '#fdba74';
                                             }
 
                                             return (
                                                 <td
                                                     key={`${rowLabel}-${colLabel}`}
-                                                    className="p-2.5 text-center font-mono font-bold text-[11px] border border-ui-border/30 rounded"
+                                                    className={`p-2.5 text-center font-mono tabular-nums font-bold text-[11px] border ${
+                                                        isPdfMode ? 'border-slate-200' : 'border-ui-border/40'
+                                                    }`}
                                                     style={{ backgroundColor: bgColor, color: textColor }}
                                                     title={`${rowLabel} vs ${colLabel}: r = ${corr.toFixed(3)}`}
                                                 >
@@ -1077,99 +1441,122 @@ export const PcaAnalysisView: React.FC<PcaAnalysisViewProps> = ({
                             </tbody>
                         </table>
                     </div>
-
-                    {/* Resumen de correlaciones destacadas */}
-                    <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                        {pca.topCorrelations.slice(0, 4).map((c, i) => (
-                            <div 
-                                key={i}
-                                className={`p-3 rounded-xl border flex items-center justify-between ${
-                                    isPdfMode ? 'bg-slate-50 border-slate-200' : 'bg-ui-darkest border-ui-border/60'
-                                }`}
-                            >
-                                <span className="font-semibold text-slate-300">
-                                    {c.var1Label} ↔ {c.var2Label}
-                                </span>
-                                <span className={`font-mono font-bold px-2 py-0.5 rounded ${
-                                    c.correlation > 0 
-                                        ? 'bg-emerald-950/70 text-emerald-400 border border-emerald-800/40' 
-                                        : 'bg-rose-950/70 text-rose-400 border border-rose-800/40'
-                                }`}>
-                                    r = {c.correlation > 0 ? `+${c.correlation.toFixed(2)}` : c.correlation.toFixed(2)}
-                                </span>
-                            </div>
-                        ))}
-                    </div>
                 </div>
             )}
 
-            {/* VISTA 5: GRAFICA DE VARIANZA EXPLICADA (SCREE PLOT / PARETO) */}
-            {(activeTab === 'scree' || isPdfMode) && (
-                <div className={`p-6 rounded-2xl border ${
-                    isPdfMode ? 'bg-white border-slate-200 text-slate-900' : 'bg-ui-card border-ui-border text-slate-100'
-                }`}>
-                    <div className="flex items-center justify-between pb-4 border-b border-ui-border/40 mb-4">
-                        <div>
-                            <h3 className="text-base font-bold flex items-center space-x-2">
-                                <BarChart3 className="w-5 h-5 text-ui-accent" />
-                                <span>Gráfica de Sedimentación (Scree Plot) y Varianza Acumulada</span>
+            {/* 6. DETALLE ESTADÍSTICO AVANZADO (SOLO EN PESTAÑA TÉCNICA) */}
+            {activeSection === 'technical' && !isPdfMode && (
+                <div className="space-y-6">
+                    {/* Cargas factoriales */}
+                    <div className={`p-5 md:p-6 rounded-2xl ${cardCls}`}>
+                        <div className="pb-4 border-b border-ui-border/40 mb-4">
+                            <h3 className={`text-base font-bold flex items-center gap-2 ${headingTextCls}`}>
+                                <Table className="w-5 h-5 text-ui-accent" />
+                                <span>Peso de cada parámetro en los ejes (Cargas Factoriales)</span>
                             </h3>
-                            <p className={`text-xs ${isPdfMode ? 'text-slate-500' : 'text-slate-400'}`}>
-                                Porcentaje de varianza original retenido por cada componente principal.
+                            <p className={`text-xs mt-0.5 ${mutedTextCls}`}>
+                                Indica cuánto influye cada nutriente en la separación horizontal (Eje 1) y vertical (Eje 2).
                             </p>
+                        </div>
+
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-xs text-left border-collapse">
+                                <thead>
+                                    <tr className="border-b border-ui-border/60 text-slate-400 bg-ui-darkest/60">
+                                        <th className="py-2.5 px-3 font-bold">Parámetro</th>
+                                        <th className="py-2.5 px-3 font-bold text-right">Carga Eje 1</th>
+                                        <th className="py-2.5 px-3 font-bold text-right">Peso Eje 1 (%)</th>
+                                        <th className="py-2.5 px-3 font-bold text-right">Carga Eje 2</th>
+                                        <th className="py-2.5 px-3 font-bold text-right">Peso Eje 2 (%)</th>
+                                        <th className="py-2.5 px-3 font-bold text-right">Calidad en Mapa (r²)</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-ui-border/30">
+                                    {pca.loadings.map(loading => (
+                                        <tr key={loading.key} className="hover:bg-ui-darkest/40">
+                                            <td className="py-2.5 px-3 font-bold flex items-center gap-2">
+                                                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: loading.color }} />
+                                                <span>{loading.label}</span>
+                                            </td>
+                                            <td className={`py-2.5 px-3 text-right font-mono tabular-nums font-bold ${
+                                                loading.pc1Loading > 0.4 ? 'text-sky-400' : loading.pc1Loading < -0.4 ? 'text-rose-400' : 'text-slate-400'
+                                            }`}>
+                                                {loading.pc1Loading > 0 ? `+${loading.pc1Loading}` : loading.pc1Loading}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-300">
+                                                {loading.contributionPc1}%
+                                            </td>
+                                            <td className={`py-2.5 px-3 text-right font-mono tabular-nums font-bold ${
+                                                loading.pc2Loading > 0.4 ? 'text-emerald-400' : loading.pc2Loading < -0.4 ? 'text-amber-400' : 'text-slate-400'
+                                            }`}>
+                                                {loading.pc2Loading > 0 ? `+${loading.pc2Loading}` : loading.pc2Loading}
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums text-slate-300">
+                                                {loading.contributionPc2}%
+                                            </td>
+                                            <td className="py-2.5 px-3 text-right font-mono tabular-nums font-bold text-slate-200">
+                                                {(loading.magnitude * 100).toFixed(1)}%
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     </div>
 
-                    <div className="h-[280px] w-full">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <ComposedChart
-                                data={pca.components.map(c => ({
-                                    name: `PC${c.component}`,
-                                    varianza: c.varianceExplainedPct,
-                                    acumulada: c.cumulativeVariancePct
-                                }))}
-                                margin={{ top: 20, right: 30, left: 10, bottom: 20 }}
-                            >
-                                <CartesianGrid strokeDasharray="3 3" stroke={isPdfMode ? '#e2e8f0' : '#1e293b'} />
-                                <XAxis 
-                                    dataKey="name" 
-                                    stroke={isPdfMode ? '#64748b' : '#94a3b8'} 
-                                    fontSize={11} 
-                                    fontWeight="bold" 
-                                />
-                                <YAxis 
-                                    stroke={isPdfMode ? '#64748b' : '#94a3b8'} 
-                                    fontSize={11} 
-                                    unit="%" 
-                                    domain={[0, 100]} 
-                                />
-                                <RechartsTooltip 
-                                    contentStyle={{
-                                        backgroundColor: isPdfMode ? '#ffffff' : '#0f172a',
-                                        borderColor: isPdfMode ? '#cbd5e1' : '#334155',
-                                        borderRadius: '8px',
-                                        color: isPdfMode ? '#0f172a' : '#f8fafc',
-                                        fontSize: '12px'
-                                    }}
-                                />
-                                <Bar dataKey="varianza" name="Varianza Individual (%)" radius={[6, 6, 0, 0]}>
-                                    {pca.components.map((entry, index) => (
-                                        <Cell 
-                                            key={`cell-${index}`} 
-                                            fill={index === 0 ? '#0284c7' : index === 1 ? '#10b981' : '#64748b'} 
-                                        />
-                                    ))}
-                                </Bar>
-                                <Line 
-                                    type="monotone" 
-                                    dataKey="acumulada" 
-                                    name="Varianza Acumulada (%)" 
-                                    stroke="#f59e0b" 
-                                    strokeWidth={3} 
-                                    dot={{ fill: '#f59e0b', r: 5 }} 
-                                />
-                            </ComposedChart>
-                        </ResponsiveContainer>
+                    {/* Scree Plot */}
+                    <div className={`p-5 md:p-6 rounded-2xl ${cardCls}`}>
+                        <div className="pb-4 border-b border-ui-border/40 mb-4">
+                            <h3 className={`text-base font-bold flex items-center gap-2 ${headingTextCls}`}>
+                                <BarChart3 className="w-5 h-5 text-ui-accent" />
+                                <span>Información retenida por componente (Scree Plot)</span>
+                            </h3>
+                            <p className={`text-xs mt-0.5 ${mutedTextCls}`}>
+                                Mientras más alta la suma de PC1 + PC2, más fiel es el mapa 2D respecto al total de variables.
+                            </p>
+                        </div>
+
+                        <div className="h-[260px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <ComposedChart
+                                    data={pca.components.map(c => ({
+                                        name: `Eje ${c.component}`,
+                                        varianza: c.varianceExplainedPct,
+                                        acumulada: c.cumulativeVariancePct
+                                    }))}
+                                    margin={{ top: 16, right: 24, left: 8, bottom: 16 }}
+                                >
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={11} fontWeight="bold" />
+                                    <YAxis stroke="#94a3b8" fontSize={11} unit="%" domain={[0, 100]} />
+                                    <RechartsTooltip
+                                        contentStyle={{
+                                            backgroundColor: '#0f172a',
+                                            borderColor: '#334155',
+                                            borderRadius: '8px',
+                                            color: '#f8fafc',
+                                            fontSize: '12px'
+                                        }}
+                                    />
+                                    <Bar dataKey="varianza" name="Varianza Individual (%)" radius={[6, 6, 0, 0]}>
+                                        {pca.components.map((_, index) => (
+                                            <Cell
+                                                key={`cell-${index}`}
+                                                fill={index === 0 ? '#0284c7' : index === 1 ? '#10b981' : '#64748b'}
+                                            />
+                                        ))}
+                                    </Bar>
+                                    <Line
+                                        type="monotone"
+                                        dataKey="acumulada"
+                                        name="Acumulada (%)"
+                                        stroke="#f59e0b"
+                                        strokeWidth={2.5}
+                                        dot={{ fill: '#f59e0b', r: 4 }}
+                                    />
+                                </ComposedChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </div>
             )}

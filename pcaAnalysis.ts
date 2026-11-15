@@ -1,14 +1,32 @@
 /**
  * Utilidades matemáticas y estadísticas para Análisis de Componentes Principales (PCA),
- * descomposición espectral (Jacobi), biplots 2D, matriz de correlación e interpretación analítica.
+ * descomposición espectral (Jacobi), agrupación por Origen/Cliente/Proveedor/Fechas
+ * y generación automática de conclusiones en lenguaje claro para toma de decisiones.
  */
 
 import { RawMaterialData } from './types';
 import { NUTRIENTS } from './constants';
+import { parseFlexibleDate } from './dateParser';
+
+export type PcaGroupField =
+    | 'Origen'
+    | 'Cliente'
+    | 'Proveedor'
+    | 'quarter'
+    | 'month'
+    | 'year'
+    | 'period_split'
+    | 'subtipo'
+    | 'material';
+
+export interface PcaCalculationOptions {
+    cutoffDateIso?: string | null;
+}
 
 export interface PcaVariableConfig {
     key: string;
     label: string;
+    unit: string;
     color: string;
     mean: number;
     stdDev: number;
@@ -19,9 +37,14 @@ export interface PcaSamplePoint {
     noId?: string;
     lote?: string;
     date: string;
+    formattedDate: string;
+    timestamp: number;
     material: string;
     subtipo?: string;
-    group: string; // Cliente, Proveedor, Mes, etc.
+    origen?: string;
+    proveedor?: string;
+    cliente?: string;
+    group: string;
     pc1: number;
     pc2: number;
     pc1Scaled: number;
@@ -32,13 +55,14 @@ export interface PcaSamplePoint {
 export interface PcaLoading {
     key: string;
     label: string;
+    unit: string;
     color: string;
-    pc1Loading: number; // Correlación con PC1 [-1, 1]
-    pc2Loading: number; // Correlación con PC2 [-1, 1]
-    magnitude: number;  // Calidad de representación en 2D (r2)
+    pc1Loading: number;
+    pc2Loading: number;
+    magnitude: number;
     angleDegrees: number;
-    contributionPc1: number; // % contribución a PC1
-    contributionPc2: number; // % contribución a PC2
+    contributionPc1: number;
+    contributionPc2: number;
 }
 
 export interface PcaComponentInfo {
@@ -48,14 +72,30 @@ export interface PcaComponentInfo {
     cumulativeVariancePct: number;
 }
 
+export interface PcaGroupVariableStat {
+    mean: number | null;
+    count: number;
+    diffVsGlobalAbs: number;
+    diffVsGlobalPct: number;
+}
+
 export interface PcaGroupCluster {
     groupName: string;
     color: string;
     sampleCount: number;
     centroidPc1: number;
     centroidPc2: number;
-    radius: number; // Desviación estándar promedio del centroide
+    centroidPc1Scaled: number;
+    centroidPc2Scaled: number;
+    radius: number;
+    radiusScaled: number;
+    stabilityLabel: 'Muy Estable' | 'Estabilidad Moderada' | 'Alta Variabilidad';
     description: string;
+    highlights: {
+        higher: string[];
+        lower: string[];
+    };
+    variableStats: Record<string, PcaGroupVariableStat>;
 }
 
 export interface PcaCorrelationItem {
@@ -64,6 +104,22 @@ export interface PcaCorrelationItem {
     var2: string;
     var2Label: string;
     correlation: number;
+}
+
+export interface PcaAxisLabels {
+    pc1Positive: string;
+    pc1Negative: string;
+    pc2Positive: string;
+    pc2Negative: string;
+}
+
+export interface PcaDecisionSummary {
+    separationLevel: 'Alta' | 'Moderada' | 'Baja' | 'Único Grupo';
+    separationTitle: string;
+    mainFinding: string;
+    stabilityFinding: string;
+    nutrientFinding: string;
+    recommendation: string;
 }
 
 export interface PcaResult {
@@ -80,7 +136,10 @@ export interface PcaResult {
     variableLabels: string[];
     topCorrelations: PcaCorrelationItem[];
     groups: PcaGroupCluster[];
-    groupField: string;
+    groupField: PcaGroupField;
+    suggestedCutoffIso: string | null;
+    axisLabels: PcaAxisLabels;
+    decisionSummary: PcaDecisionSummary;
     interpretation: {
         summary: string;
         pc1Drivers: { positive: string[]; negative: string[] };
@@ -90,14 +149,14 @@ export interface PcaResult {
     };
 }
 
-// Paleta de colores distintivos y accesibles para grupos (Clientes, etc.)
+// Paleta de colores distintivos y accesibles para grupos
 export const GROUP_PALETTE = [
     '#0284c7', // Sky Blue
     '#10b981', // Emerald
     '#f59e0b', // Amber
     '#8b5cf6', // Violet
     '#ec4899', // Pink
-    '#06b6d4', // Cyan
+    '#0ea5e9', // Light Blue
     '#f97316', // Orange
     '#14b8a6', // Teal
     '#84cc16', // Lime
@@ -106,21 +165,43 @@ export const GROUP_PALETTE = [
     '#64748b'  // Slate
 ];
 
+function extractUnit(label: string): string {
+    const match = label.match(/\(([^)]+)\)/);
+    return match ? match[1] : '';
+}
+
+function formatShortDate(dt: Date | null, fallback: string): string {
+    if (!dt || isNaN(dt.getTime())) return fallback || 'Sin fecha';
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const y = dt.getUTCFullYear();
+    return `${d}/${m}/${y}`;
+}
+
+function toIsoDateUTC(dt: Date): string {
+    const d = String(dt.getUTCDate()).padStart(2, '0');
+    const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const y = dt.getUTCFullYear();
+    return `${y}-${m}-${d}`;
+}
+
+function formatNum(val: number): string {
+    if (Math.abs(val) >= 100) return val.toFixed(1);
+    if (Math.abs(val) >= 10) return val.toFixed(2);
+    return val.toFixed(2);
+}
+
 /**
  * Algoritmo de rotación de Jacobi para matrices simétricas reales.
- * Encuentra de forma exacta y numéricamente estable todos los autovalores y autovectores.
  */
-function jacobiEigenvalues(matrix: number[][], maxIter = 100, tolerance = 1e-10) {
+function jacobiEigenvalues(matrix: number[][], maxIter = 120, tolerance = 1e-10) {
     const n = matrix.length;
-    // Copia de la matriz simétrica A
     const A: number[][] = matrix.map(row => [...row]);
-    // Matriz de autovectores V inicializada como identidad
     const V: number[][] = Array.from({ length: n }, (_, i) =>
         Array.from({ length: n }, (_, j) => (i === j ? 1.0 : 0.0))
     );
 
     for (let iter = 0; iter < maxIter; iter++) {
-        // Encontrar el elemento fuera de la diagonal con mayor valor absoluto
         let maxVal = 0;
         let p = 0;
         let q = 1;
@@ -136,9 +217,7 @@ function jacobiEigenvalues(matrix: number[][], maxIter = 100, tolerance = 1e-10)
             }
         }
 
-        if (maxVal < tolerance) {
-            break;
-        }
+        if (maxVal < tolerance) break;
 
         const app = A[p][p];
         const aqq = A[q][q];
@@ -149,7 +228,6 @@ function jacobiEigenvalues(matrix: number[][], maxIter = 100, tolerance = 1e-10)
         const c = 1.0 / Math.sqrt(1.0 + t * t);
         const s = t * c;
 
-        // Actualizar A
         A[p][p] = app - t * apq;
         A[q][q] = aqq + t * apq;
         A[p][q] = 0.0;
@@ -166,7 +244,6 @@ function jacobiEigenvalues(matrix: number[][], maxIter = 100, tolerance = 1e-10)
             }
         }
 
-        // Actualizar matriz de autovectores V
         for (let k = 0; k < n; k++) {
             const vkp = V[k][p];
             const vkq = V[k][q];
@@ -175,10 +252,7 @@ function jacobiEigenvalues(matrix: number[][], maxIter = 100, tolerance = 1e-10)
         }
     }
 
-    // Extraer autovalores de la diagonal
     const rawEigenvalues = A.map((row, i) => Math.max(0, row[i]));
-
-    // Emparejar y ordenar de mayor a menor autovalor
     const eigenPairs = rawEigenvalues.map((lambda, idx) => ({
         eigenvalue: lambda,
         vector: V.map(row => row[idx])
@@ -188,143 +262,159 @@ function jacobiEigenvalues(matrix: number[][], maxIter = 100, tolerance = 1e-10)
 
     return {
         eigenvalues: eigenPairs.map(p => p.eigenvalue),
-        eigenvectors: eigenPairs.map(p => p.vector) // cada elemento es el vector para ese autovalor
+        eigenvectors: eigenPairs.map(p => p.vector)
+    };
+}
+
+function emptyInvalidResult(
+    errorMessage: string,
+    groupField: PcaGroupField,
+    sampleCount = 0,
+    variableCount = 0
+): PcaResult {
+    return {
+        isValid: false,
+        errorMessage,
+        sampleCount,
+        variableCount,
+        variables: [],
+        components: [],
+        totalVarianceExplained2D: 0,
+        samples: [],
+        loadings: [],
+        correlationMatrix: [],
+        variableLabels: [],
+        topCorrelations: [],
+        groups: [],
+        groupField,
+        suggestedCutoffIso: null,
+        axisLabels: {
+            pc1Positive: 'Mayor concentración',
+            pc1Negative: 'Menor concentración',
+            pc2Positive: 'Perfil superior',
+            pc2Negative: 'Perfil inferior'
+        },
+        decisionSummary: {
+            separationLevel: 'Único Grupo',
+            separationTitle: 'Datos insuficientes para calcular PCA',
+            mainFinding: errorMessage,
+            stabilityFinding: '',
+            nutrientFinding: '',
+            recommendation: 'Selecciona al menos 3 muestras y 2 parámetros con valores registrados.'
+        },
+        interpretation: {
+            summary: errorMessage,
+            pc1Drivers: { positive: [], negative: [] },
+            pc2Drivers: { positive: [], negative: [] },
+            strongestRelations: [],
+            groupInsights: []
+        }
     };
 }
 
 /**
- * Ejecuta el Análisis de Componentes Principales (PCA) completo sobre los datos de muestras.
+ * Ejecuta el Análisis de Componentes Principales (PCA) y genera resúmenes entendibles.
  */
 export function calculatePca(
     data: RawMaterialData[],
     selectedVariableKeys: string[],
-    groupField: 'Cliente' | 'Proveedor' | 'subtipo' | 'material' | 'month' = 'Cliente'
+    groupField: PcaGroupField = 'Origen',
+    options: PcaCalculationOptions = {}
 ): PcaResult {
-    // 1. Validaciones básicas
     if (!data || data.length < 3) {
-        return {
-            isValid: false,
-            errorMessage: 'Se requieren al menos 3 muestras para realizar el análisis de PCA.',
-            sampleCount: 0,
-            variableCount: 0,
-            variables: [],
-            components: [],
-            totalVarianceExplained2D: 0,
-            samples: [],
-            loadings: [],
-            correlationMatrix: [],
-            variableLabels: [],
-            topCorrelations: [],
-            groups: [],
-            groupField,
-            interpretation: {
-                summary: 'Insuficientes datos para calcular componentes.',
-                pc1Drivers: { positive: [], negative: [] },
-                pc2Drivers: { positive: [], negative: [] },
-                strongestRelations: [],
-                groupInsights: []
-            }
-        };
+        return emptyInvalidResult(
+            'Se requieren al menos 3 muestras para realizar el análisis comparativo.',
+            groupField
+        );
     }
 
-    // 2. Filtrar variables que existan en NUTRIENTS y tengan datos numéricos
     const candidateConfigs = selectedVariableKeys
         .map(key => NUTRIENTS.find(n => n.key === key))
         .filter((n): n is typeof NUTRIENTS[0] => !!n);
 
     if (candidateConfigs.length < 2) {
-        return {
-            isValid: false,
-            errorMessage: 'Selecciona al menos 2 variables analíticas para calcular el PCA.',
-            sampleCount: 0,
-            variableCount: 0,
-            variables: [],
-            components: [],
-            totalVarianceExplained2D: 0,
-            samples: [],
-            loadings: [],
-            correlationMatrix: [],
-            variableLabels: [],
-            topCorrelations: [],
-            groups: [],
-            groupField,
-            interpretation: {
-                summary: 'Selecciona más variables para el modelo.',
-                pc1Drivers: { positive: [], negative: [] },
-                pc2Drivers: { positive: [], negative: [] },
-                strongestRelations: [],
-                groupInsights: []
-            }
-        };
+        return emptyInvalidResult(
+            'Selecciona al menos 2 parámetros nutricionales para comparar.',
+            groupField
+        );
     }
 
-    // 3. Extraer valores y filtrar muestras que tengan al menos una variable numérica
-    // Calcular medias preliminares por variable para imputar valores faltantes sin perder la muestra
+    // Extraer estadísticas globales válidas (ignorando ceros/vacíos que representan análisis no realizados)
     const validVariables: PcaVariableConfig[] = [];
-    const varIndices: number[] = [];
 
-    candidateConfigs.forEach((config, idx) => {
+    candidateConfigs.forEach(config => {
         const values = data
-            .map(d => Number(d[config.key]))
-            .filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
+            .map(d => {
+                const raw = d[config.key];
+                if (raw === undefined || raw === null || raw === '') return NaN;
+                return Number(raw);
+            })
+            .filter(v => !isNaN(v) && isFinite(v) && v !== 0);
 
         if (values.length >= 3) {
             const mean = values.reduce((a, b) => a + b, 0) / values.length;
-            const variance = values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length - 1);
+            const variance =
+                values.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / (values.length - 1);
             const stdDev = Math.sqrt(variance);
 
-            // Sólo incluir variables con varianza no nula
             if (stdDev > 1e-6) {
                 validVariables.push({
                     key: config.key,
-                    label: config.label.replace(/\s*\(.*?\)/, ''), // Nombre limpio
+                    label: config.label.replace(/\s*\(.*?\)/, '').trim(),
+                    unit: extractUnit(config.label),
                     color: config.color,
                     mean,
                     stdDev
                 });
-                varIndices.push(idx);
             }
         }
     });
 
     if (validVariables.length < 2) {
-        return {
-            isValid: false,
-            errorMessage: 'Las variables seleccionadas no tienen suficiente variabilidad o registros válidos.',
-            sampleCount: 0,
-            variableCount: 0,
-            variables: [],
-            components: [],
-            totalVarianceExplained2D: 0,
-            samples: [],
-            loadings: [],
-            correlationMatrix: [],
-            variableLabels: [],
-            topCorrelations: [],
-            groups: [],
-            groupField,
-            interpretation: {
-                summary: 'No hay variabilidad suficiente.',
-                pc1Drivers: { positive: [], negative: [] },
-                pc2Drivers: { positive: [], negative: [] },
-                strongestRelations: [],
-                groupInsights: []
-            }
-        };
+        return emptyInvalidResult(
+            'Los parámetros elegidos no tienen suficiente variabilidad o registros válidos en este filtro.',
+            groupField
+        );
     }
 
     const P = validVariables.length;
 
-    // 4. Construir matriz estandarizada Z (N x P)
-    // Descartar muestras que no tengan ningún dato en las variables seleccionadas
+    // Determinar fechas válidas para calcular punto medio (útil para "Antes vs Después")
+    const parsedDates = data
+        .map(d => parseFlexibleDate(d.date))
+        .filter((dt): dt is Date => dt !== null && !isNaN(dt.getTime()))
+        .sort((a, b) => a.getTime() - b.getTime());
+
+    let suggestedCutoffIso: string | null = null;
+    if (parsedDates.length >= 2) {
+        const midIdx = Math.floor(parsedDates.length / 2);
+        suggestedCutoffIso = toIsoDateUTC(parsedDates[midIdx]);
+    }
+
+    const activeCutoffIso = options.cutoffDateIso || suggestedCutoffIso;
+    let cutoffTimestamp = 0;
+    let cutoffLabel = '';
+    if (activeCutoffIso) {
+        const [cy, cm, cd] = activeCutoffIso.split('-').map(Number);
+        if (cy && cm && cd) {
+            const cDate = new Date(Date.UTC(cy, cm - 1, cd));
+            cutoffTimestamp = cDate.getTime();
+            cutoffLabel = formatShortDate(cDate, activeCutoffIso);
+        }
+    }
+
     interface RowWithData {
         raw: RawMaterialData;
         rawValues: Record<string, number>;
         zRow: number[];
         group: string;
+        groupSortKey: string;
+        parsedDate: Date | null;
+        timestamp: number;
     }
 
     const rowsWithData: RowWithData[] = [];
+    const monthNamesShort = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 
     data.forEach(d => {
         let hasAnyValue = false;
@@ -332,75 +422,110 @@ export function calculatePca(
         const zRow: number[] = [];
 
         validVariables.forEach(v => {
-            const rawVal = Number(d[v.key]);
-            if (typeof rawVal === 'number' && !isNaN(rawVal) && isFinite(rawVal)) {
+            const rawInput = d[v.key];
+            const rawVal =
+                rawInput === undefined || rawInput === null || rawInput === ''
+                    ? NaN
+                    : Number(rawInput);
+
+            if (!isNaN(rawVal) && isFinite(rawVal) && rawVal !== 0) {
                 hasAnyValue = true;
                 rawVals[v.key] = rawVal;
                 zRow.push((rawVal - v.mean) / v.stdDev);
             } else {
-                // Imputación con la media estandarizada (0)
-                rawVals[v.key] = v.mean;
                 zRow.push(0.0);
             }
         });
 
-        if (hasAnyValue) {
-            let grp = 'General';
-            if (groupField === 'Cliente') {
-                grp = String(d.Cliente || 'Sin Cliente').trim() || 'Sin Cliente';
-            } else if (groupField === 'Proveedor') {
-                grp = String(d.Proveedor || 'Sin Proveedor').trim() || 'Sin Proveedor';
-            } else if (groupField === 'subtipo') {
-                grp = String(d.subtipo || 'Estándar').trim() || 'Estándar';
-            } else if (groupField === 'material') {
-                grp = String(d.material || 'General').trim() || 'General';
-            } else if (groupField === 'month') {
-                try {
-                    const dt = new Date(d.date);
-                    grp = dt.toLocaleDateString('es-ES', { month: 'short', year: 'numeric' });
-                } catch {
-                    grp = 'General';
-                }
-            }
+        if (!hasAnyValue) return;
 
-            rowsWithData.push({
-                raw: d,
-                rawValues: rawVals,
-                zRow,
-                group: grp
-            });
+        const dt = parseFlexibleDate(d.date);
+        const ts = dt ? dt.getTime() : 0;
+
+        let grp = 'General';
+        let sortKey = 'General';
+
+        if (groupField === 'Origen') {
+            grp = String(d.Origen || 'Sin Origen').trim() || 'Sin Origen';
+            sortKey = grp;
+        } else if (groupField === 'Cliente') {
+            grp = String(d.Cliente || 'Sin Cliente').trim() || 'Sin Cliente';
+            sortKey = grp;
+        } else if (groupField === 'Proveedor') {
+            grp = String(d.Proveedor || 'Sin Proveedor').trim() || 'Sin Proveedor';
+            sortKey = grp;
+        } else if (groupField === 'subtipo') {
+            grp = String(d.subtipo || 'Estándar').trim() || 'Estándar';
+            sortKey = grp;
+        } else if (groupField === 'material') {
+            grp = String(d.material || 'General').trim() || 'General';
+            sortKey = grp;
+        } else if (groupField === 'month') {
+            if (dt) {
+                const yr = dt.getUTCFullYear();
+                const mo = dt.getUTCMonth();
+                grp = `${monthNamesShort[mo]} ${yr}`;
+                sortKey = `${yr}-${String(mo + 1).padStart(2, '0')}`;
+            } else {
+                grp = 'Sin Fecha';
+                sortKey = '9999-99';
+            }
+        } else if (groupField === 'quarter') {
+            if (dt) {
+                const yr = dt.getUTCFullYear();
+                const q = Math.floor(dt.getUTCMonth() / 3) + 1;
+                grp = `T${q} ${yr}`;
+                sortKey = `${yr}-Q${q}`;
+            } else {
+                grp = 'Sin Fecha';
+                sortKey = '9999-Q9';
+            }
+        } else if (groupField === 'year') {
+            if (dt) {
+                const yr = dt.getUTCFullYear();
+                grp = `${yr}`;
+                sortKey = `${yr}`;
+            } else {
+                grp = 'Sin Fecha';
+                sortKey = '9999';
+            }
+        } else if (groupField === 'period_split') {
+            if (dt && cutoffTimestamp > 0) {
+                if (ts < cutoffTimestamp) {
+                    grp = `Antes de ${cutoffLabel}`;
+                    sortKey = '1';
+                } else {
+                    grp = `Desde ${cutoffLabel}`;
+                    sortKey = '2';
+                }
+            } else {
+                grp = 'Sin Fecha';
+                sortKey = '3';
+            }
         }
+
+        rowsWithData.push({
+            raw: d,
+            rawValues: rawVals,
+            zRow,
+            group: grp,
+            groupSortKey: sortKey,
+            parsedDate: dt,
+            timestamp: ts
+        });
     });
 
     const N = rowsWithData.length;
     if (N < 3) {
-        return {
-            isValid: false,
-            errorMessage: 'Se necesitan al menos 3 muestras válidas con los parámetros elegidos.',
-            sampleCount: N,
-            variableCount: P,
-            variables: validVariables,
-            components: [],
-            totalVarianceExplained2D: 0,
-            samples: [],
-            loadings: [],
-            correlationMatrix: [],
-            variableLabels: validVariables.map(v => v.label),
-            topCorrelations: [],
-            groups: [],
+        return emptyInvalidResult(
+            'Se necesitan al menos 3 muestras válidas con los parámetros elegidos.',
             groupField,
-            interpretation: {
-                summary: 'Muestras insuficientes.',
-                pc1Drivers: { positive: [], negative: [] },
-                pc2Drivers: { positive: [], negative: [] },
-                strongestRelations: [],
-                groupInsights: []
-            }
-        };
+            N,
+            P
+        );
     }
 
-    // 5. Matriz de Correlación R (P x P)
-    // R_jk = 1 / (N - 1) * sum(Z_ij * Z_ik)
+    // Matriz de Correlación R (P x P)
     const R: number[][] = Array.from({ length: P }, () => Array(P).fill(0));
     for (let j = 0; j < P; j++) {
         for (let k = j; k < P; k++) {
@@ -418,7 +543,6 @@ export function calculatePca(
         }
     }
 
-    // Extraer correlaciones más destacadas
     const topCorrelations: PcaCorrelationItem[] = [];
     for (let j = 0; j < P; j++) {
         for (let k = j + 1; k < P; k++) {
@@ -431,14 +555,11 @@ export function calculatePca(
             });
         }
     }
-    // Ordenar por magnitud de correlación absoluta
     topCorrelations.sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation));
 
-    // 6. Descomposición Espectral (Jacobi)
+    // Descomposición Espectral
     const { eigenvalues, eigenvectors } = jacobiEigenvalues(R);
-
-    // Suma de autovalores = traza de R = P
-    const totalVariance = eigenvalues.reduce((a, b) => a + b, 0);
+    const totalVariance = Math.max(1e-9, eigenvalues.reduce((a, b) => a + b, 0));
 
     let cumulative = 0;
     const components: PcaComponentInfo[] = eigenvalues.map((ev, idx) => {
@@ -447,8 +568,8 @@ export function calculatePca(
         return {
             component: idx + 1,
             eigenvalue: ev,
-            varianceExplainedPct: parseFloat(pct.toFixed(2)),
-            cumulativeVariancePct: parseFloat(cumulative.toFixed(2))
+            varianceExplainedPct: parseFloat(pct.toFixed(1)),
+            cumulativeVariancePct: parseFloat(cumulative.toFixed(1))
         };
     });
 
@@ -456,11 +577,8 @@ export function calculatePca(
         ((components[0]?.varianceExplainedPct || 0) + (components[1]?.varianceExplainedPct || 0)).toFixed(1)
     );
 
-    // 7. Cargas Factoriales (Loadings) en PC1 y PC2
-    // Loading_j,k = eigenvector_j,k * sqrt(lambda_k)
     const sqrtLambda1 = Math.sqrt(Math.max(0, eigenvalues[0] || 0));
     const sqrtLambda2 = Math.sqrt(Math.max(0, eigenvalues[1] || 0));
-
     const v1 = eigenvectors[0] || Array(P).fill(0);
     const v2 = eigenvectors[1] || Array(P).fill(0);
 
@@ -471,29 +589,38 @@ export function calculatePca(
         let angle = (Math.atan2(l2, l1) * 180) / Math.PI;
         if (angle < 0) angle += 360;
 
-        // Contribución a PC1: (v1[j]^2 / sum(v1^2)) * 100
-        const contrib1 = Math.pow(v1[j] || 0, 2) * 100;
-        const contrib2 = Math.pow(v2[j] || 0, 2) * 100;
-
         return {
             key: v.key,
             label: v.label,
+            unit: v.unit,
             color: v.color,
             pc1Loading: parseFloat(l1.toFixed(3)),
             pc2Loading: parseFloat(l2.toFixed(3)),
             magnitude: parseFloat(mag.toFixed(3)),
             angleDegrees: parseFloat(angle.toFixed(1)),
-            contributionPc1: parseFloat(contrib1.toFixed(1)),
-            contributionPc2: parseFloat(contrib2.toFixed(1))
+            contributionPc1: parseFloat((Math.pow(v1[j] || 0, 2) * 100).toFixed(1)),
+            contributionPc2: parseFloat((Math.pow(v2[j] || 0, 2) * 100).toFixed(1))
         };
     });
 
-    // 8. Puntuaciones de Muestras (Scores) en PC1 y PC2
-    // Score_i,k = sum_j (Z_ij * v_k[j])
+    // Etiquetas humanas para los 4 extremos del mapa
+    const topPc1Pos = loadings.filter(l => l.pc1Loading > 0.28).sort((a, b) => b.pc1Loading - a.pc1Loading).slice(0, 2).map(l => l.label);
+    const topPc1Neg = loadings.filter(l => l.pc1Loading < -0.28).sort((a, b) => a.pc1Loading - b.pc1Loading).slice(0, 2).map(l => l.label);
+    const topPc2Pos = loadings.filter(l => l.pc2Loading > 0.25).sort((a, b) => b.pc2Loading - a.pc2Loading).slice(0, 2).map(l => l.label);
+    const topPc2Neg = loadings.filter(l => l.pc2Loading < -0.25).sort((a, b) => a.pc2Loading - b.pc2Loading).slice(0, 2).map(l => l.label);
+
+    const axisLabels: PcaAxisLabels = {
+        pc1Positive: topPc1Pos.length > 0 ? `Mayor ${topPc1Pos.join(' y ')}` : 'Eje 1 Positivo',
+        pc1Negative: topPc1Neg.length > 0 ? `Mayor ${topPc1Neg.join(' y ')}` : 'Valores bajos de ' + (topPc1Pos[0] || 'Eje 1'),
+        pc2Positive: topPc2Pos.length > 0 ? `Mayor ${topPc2Pos.join(' y ')}` : 'Eje 2 Positivo',
+        pc2Negative: topPc2Neg.length > 0 ? `Mayor ${topPc2Neg.join(' y ')}` : 'Valores bajos de ' + (topPc2Pos[0] || 'Eje 2')
+    };
+
+    // Scores por muestra
     let maxAbsScore1 = 0;
     let maxAbsScore2 = 0;
 
-    const rawScores = rowsWithData.map((row, i) => {
+    const rawScores = rowsWithData.map(row => {
         let sc1 = 0;
         let sc2 = 0;
         for (let j = 0; j < P; j++) {
@@ -502,18 +629,12 @@ export function calculatePca(
         }
         if (Math.abs(sc1) > maxAbsScore1) maxAbsScore1 = Math.abs(sc1);
         if (Math.abs(sc2) > maxAbsScore2) maxAbsScore2 = Math.abs(sc2);
-
-        return {
-            row,
-            sc1,
-            sc2
-        };
+        return { row, sc1, sc2 };
     });
 
-    if (maxAbsScore1 === 0) maxAbsScore1 = 1;
-    if (maxAbsScore2 === 0) maxAbsScore2 = 1;
+    if (maxAbsScore1 < 1e-6) maxAbsScore1 = 1;
+    if (maxAbsScore2 < 1e-6) maxAbsScore2 = 1;
 
-    // Escalamiento del Biplot: Normalizar scores a una ventana visual adecuada [-1.1, 1.1]
     const samples: PcaSamplePoint[] = rawScores.map((item, idx) => {
         const { row, sc1, sc2 } = item;
         return {
@@ -521,19 +642,39 @@ export function calculatePca(
             noId: row.raw.noId,
             lote: row.raw.lote,
             date: row.raw.date,
+            formattedDate: formatShortDate(row.parsedDate, row.raw.date),
+            timestamp: row.timestamp,
             material: row.raw.material,
             subtipo: row.raw.subtipo,
+            origen: row.raw.Origen,
+            proveedor: row.raw.Proveedor,
+            cliente: row.raw.Cliente,
             group: row.group,
             pc1: parseFloat(sc1.toFixed(3)),
             pc2: parseFloat(sc2.toFixed(3)),
-            pc1Scaled: parseFloat(((sc1 / maxAbsScore1) * 0.95).toFixed(3)),
-            pc2Scaled: parseFloat(((sc2 / maxAbsScore2) * 0.95).toFixed(3)),
+            pc1Scaled: parseFloat(((sc1 / maxAbsScore1) * 0.92).toFixed(3)),
+            pc2Scaled: parseFloat(((sc2 / maxAbsScore2) * 0.92).toFixed(3)),
             values: row.rawValues
         };
     });
 
-    // 9. Agrupación por Clusters (Cliente, etc.)
-    const uniqueGroups = Array.from(new Set(samples.map(s => s.group)));
+    // Ordenar grupos de manera lógica (cronológica si es fecha, por cantidad de muestras si es categoría)
+    const isTemporalField = ['month', 'quarter', 'year', 'period_split'].includes(groupField);
+    const groupSortKeys = new Map<string, string>();
+    const groupCounts = new Map<string, number>();
+
+    rowsWithData.forEach(r => {
+        if (!groupSortKeys.has(r.group)) groupSortKeys.set(r.group, r.groupSortKey);
+        groupCounts.set(r.group, (groupCounts.get(r.group) || 0) + 1);
+    });
+
+    const uniqueGroups = Array.from(groupCounts.keys()).sort((a, b) => {
+        if (isTemporalField) {
+            return (groupSortKeys.get(a) || '').localeCompare(groupSortKeys.get(b) || '');
+        }
+        return (groupCounts.get(b) || 0) - (groupCounts.get(a) || 0);
+    });
+
     const groupColorMap: Record<string, string> = {};
     uniqueGroups.forEach((g, idx) => {
         groupColorMap[g] = GROUP_PALETTE[idx % GROUP_PALETTE.length];
@@ -543,30 +684,77 @@ export function calculatePca(
         const gSamples = samples.filter(s => s.group === g);
         const meanPc1 = gSamples.reduce((sum, s) => sum + s.pc1, 0) / gSamples.length;
         const meanPc2 = gSamples.reduce((sum, s) => sum + s.pc2, 0) / gSamples.length;
+        const meanPc1Scaled = gSamples.reduce((sum, s) => sum + s.pc1Scaled, 0) / gSamples.length;
+        const meanPc2Scaled = gSamples.reduce((sum, s) => sum + s.pc2Scaled, 0) / gSamples.length;
 
-        // Dispersión / Radio medio
-        const dists = gSamples.map(s => Math.sqrt(Math.pow(s.pc1 - meanPc1, 2) + Math.pow(s.pc2 - meanPc2, 2)));
+        const dists = gSamples.map(s =>
+            Math.sqrt(Math.pow(s.pc1 - meanPc1, 2) + Math.pow(s.pc2 - meanPc2, 2))
+        );
         const radius = dists.reduce((a, b) => a + b, 0) / Math.max(1, dists.length);
 
-        // Descripción cualitativa del perfil
-        let desc = 'Perfil nutricional promedio equilibrado.';
-        const pos1 = meanPc1 > 0.5;
-        const neg1 = meanPc1 < -0.5;
-        const pos2 = meanPc2 > 0.5;
-        const neg2 = meanPc2 < -0.5;
+        const distsScaled = gSamples.map(s =>
+            Math.sqrt(Math.pow(s.pc1Scaled - meanPc1Scaled, 2) + Math.pow(s.pc2Scaled - meanPc2Scaled, 2))
+        );
+        // Radio visual representativo (promedio + 0.5*std para envolver la mayoría del grupo)
+        const meanDistScaled = distsScaled.reduce((a, b) => a + b, 0) / Math.max(1, distsScaled.length);
+        const radiusScaled = Math.max(0.08, Math.min(0.55, meanDistScaled * 1.25));
 
-        // Variables dominantes en el cuadrante del centroide
-        const drivingVars = loadings
-            .filter(l => (pos1 ? l.pc1Loading > 0.3 : neg1 ? l.pc1Loading < -0.3 : true))
-            .filter(l => (pos2 ? l.pc2Loading > 0.3 : neg2 ? l.pc2Loading < -0.3 : true))
-            .map(l => l.label);
+        const stabilityLabel: PcaGroupCluster['stabilityLabel'] =
+            radius < 0.9 ? 'Muy Estable' : radius < 1.6 ? 'Estabilidad Moderada' : 'Alta Variabilidad';
 
-        if (drivingVars.length > 0) {
-            desc = `Mayor tendencia hacia: ${drivingVars.slice(0, 3).join(', ')}.`;
-        } else if (pos1) {
-            desc = 'Valores por encima de la media en el Componente 1.';
-        } else if (neg1) {
-            desc = 'Valores por debajo de la media en el Componente 1.';
+        // Calcular promedios reales por nutriente para este grupo
+        const variableStats: Record<string, PcaGroupVariableStat> = {};
+        const higherList: { label: string; diffPct: number }[] = [];
+        const lowerList: { label: string; diffPct: number }[] = [];
+
+        validVariables.forEach(v => {
+            const vals = gSamples
+                .map(s => s.values[v.key])
+                .filter(val => typeof val === 'number' && !isNaN(val) && val !== 0);
+
+            if (vals.length > 0) {
+                const gMean = vals.reduce((a, b) => a + b, 0) / vals.length;
+                const diffAbs = gMean - v.mean;
+                const diffPct = v.mean !== 0 ? (diffAbs / v.mean) * 100 : 0;
+
+                variableStats[v.key] = {
+                    mean: parseFloat(gMean.toFixed(3)),
+                    count: vals.length,
+                    diffVsGlobalAbs: parseFloat(diffAbs.toFixed(3)),
+                    diffVsGlobalPct: parseFloat(diffPct.toFixed(1))
+                };
+
+                // Destacar diferencias significativas (>3% respecto al promedio general o >0.35 desv. estándar)
+                const zDiff = v.stdDev > 0 ? Math.abs(diffAbs) / v.stdDev : 0;
+                if (zDiff >= 0.35 || Math.abs(diffPct) >= 4) {
+                    const sign = diffPct > 0 ? '+' : '';
+                    const tag = `${v.label} (${sign}${diffPct.toFixed(1)}%)`;
+                    if (diffPct > 0) higherList.push({ label: tag, diffPct });
+                    else lowerList.push({ label: tag, diffPct: Math.abs(diffPct) });
+                }
+            } else {
+                variableStats[v.key] = {
+                    mean: null,
+                    count: 0,
+                    diffVsGlobalAbs: 0,
+                    diffVsGlobalPct: 0
+                };
+            }
+        });
+
+        higherList.sort((a, b) => b.diffPct - a.diffPct);
+        lowerList.sort((a, b) => b.diffPct - a.diffPct);
+
+        const higher = higherList.slice(0, 2).map(x => x.label);
+        const lower = lowerList.slice(0, 2).map(x => x.label);
+
+        let desc = 'Cerca del promedio general en casi todos los parámetros.';
+        if (higher.length > 0 && lower.length > 0) {
+            desc = `Más alto en ${higher[0]}; más bajo en ${lower[0]}.`;
+        } else if (higher.length > 0) {
+            desc = `Destaca por mayor ${higher.join(' y ')}.`;
+        } else if (lower.length > 0) {
+            desc = `Presenta menor ${lower.join(' y ')}.`;
         }
 
         return {
@@ -575,28 +763,30 @@ export function calculatePca(
             sampleCount: gSamples.length,
             centroidPc1: parseFloat(meanPc1.toFixed(3)),
             centroidPc2: parseFloat(meanPc2.toFixed(3)),
+            centroidPc1Scaled: parseFloat(meanPc1Scaled.toFixed(3)),
+            centroidPc2Scaled: parseFloat(meanPc2Scaled.toFixed(3)),
             radius: parseFloat(radius.toFixed(2)),
-            description: desc
+            radiusScaled: parseFloat(radiusScaled.toFixed(3)),
+            stabilityLabel,
+            description: desc,
+            highlights: { higher, lower },
+            variableStats
         };
     });
 
-    // 10. Interpretación Estadística en Español
-    // Identificar variables clave para PC1 y PC2
-    const pc1Pos = loadings.filter(l => l.pc1Loading >= 0.4).sort((a, b) => b.pc1Loading - a.pc1Loading).map(l => `${l.label} (+${l.pc1Loading})`);
-    const pc1Neg = loadings.filter(l => l.pc1Loading <= -0.4).sort((a, b) => a.pc1Loading - b.pc1Loading).map(l => `${l.label} (${l.pc1Loading})`);
-
-    const pc2Pos = loadings.filter(l => l.pc2Loading >= 0.35).sort((a, b) => b.pc2Loading - a.pc2Loading).map(l => `${l.label} (+${l.pc2Loading})`);
-    const pc2Neg = loadings.filter(l => l.pc2Loading <= -0.35).sort((a, b) => a.pc2Loading - b.pc2Loading).map(l => `${l.label} (${l.pc2Loading})`);
-
-    const strongestRelations = topCorrelations.slice(0, 4).map(c => {
-        const type = c.correlation > 0 ? 'positiva directa' : 'inversa';
-        const strength = Math.abs(c.correlation) > 0.7 ? 'muy fuerte' : 'moderada';
-        return `${c.var1Label} y ${c.var2Label} tienen correlación ${strength} ${type} (r = ${c.correlation.toFixed(2)}).`;
-    });
+    // Evaluación de separación entre grupos y generación de conclusiones accionables
+    let separationLevel: PcaDecisionSummary['separationLevel'] = 'Único Grupo';
+    let separationTitle = 'Análisis de un solo grupo (sin comparación entre segmentos)';
+    let mainFinding = `Todas las ${N} muestras pertenecen a "${groups[0]?.groupName}". Cambia el criterio superior (ej. Origen, Cliente o Trimestre) para comparar segmentos.`;
+    let stabilityFinding = groups[0]
+        ? `Dispersión interna del grupo: ${groups[0].stabilityLabel} (índice σ = ${groups[0].radius}).`
+        : '';
+    let recommendation = 'Usa "Antes vs Después" o "Trimestre" para evaluar si la calidad cambió en el tiempo.';
 
     const groupInsights: string[] = [];
+
     if (groups.length > 1) {
-        // Encontrar los 2 grupos más distantes entre sí
+        // Encontrar el par de grupos con mayor distancia entre centroides
         let maxDist = -1;
         let gA = groups[0];
         let gB = groups[1];
@@ -613,18 +803,97 @@ export function calculatePca(
                 }
             }
         }
-        if (maxDist > 1.0) {
-            groupInsights.push(
-                `Diferenciación clara detectada entre "${gA.groupName}" y "${gB.groupName}" (distancia euclídea = ${maxDist.toFixed(2)}). ${gA.groupName} presenta ${gA.description.toLowerCase()}`
-            );
+
+        // Medir separación relativa respecto a la dispersión interna media
+        const avgRadius = groups.reduce((acc, g) => acc + g.radius, 0) / groups.length;
+        const separationRatio = avgRadius > 0.05 ? maxDist / avgRadius : maxDist;
+
+        if (separationRatio >= 1.8 && maxDist >= 1.1) {
+            separationLevel = 'Alta';
+            separationTitle = 'Diferenciación clara entre grupos';
+        } else if (separationRatio >= 1.0 && maxDist >= 0.6) {
+            separationLevel = 'Moderada';
+            separationTitle = 'Diferencias moderadas entre grupos';
         } else {
-            groupInsights.push(
-                'Los clientes/grupos presentan perfiles nutricionales bastante homogéneos sin segregaciones drásticas.'
-            );
+            separationLevel = 'Baja';
+            separationTitle = 'Perfiles similares (traslape alto)';
         }
+
+        // Identificar qué variables reales diferencian más a gA vs gB
+        const diffVars = validVariables
+            .map(v => {
+                const statA = gA.variableStats[v.key];
+                const statB = gB.variableStats[v.key];
+                if (!statA || !statB || statA.mean === null || statB.mean === null) return null;
+                const zGap = v.stdDev > 0 ? Math.abs(statA.mean - statB.mean) / v.stdDev : 0;
+                return {
+                    label: v.label,
+                    unit: v.unit,
+                    meanA: statA.mean,
+                    meanB: statB.mean,
+                    zGap
+                };
+            })
+            .filter((x): x is NonNullable<typeof x> => x !== null)
+            .sort((a, b) => b.zGap - a.zGap);
+
+        const topDiff = diffVars[0];
+        const secondDiff = diffVars[1];
+
+        if (separationLevel === 'Baja') {
+            mainFinding = `Los segmentos analizados tienen perfiles nutricionales muy parecidos y se mezclan en el mapa. La mayor diferencia leve se da entre "${gA.groupName}" y "${gB.groupName}"${
+                topDiff ? ` en ${topDiff.label} (${formatNum(topDiff.meanA)} vs ${formatNum(topDiff.meanB)} ${topDiff.unit})` : ''
+            }.`;
+            recommendation = 'En este criterio la calidad es prácticamente equivalente; enfócate en revisar lotes puntuales alejados del centro o cambia a otro criterio (ej. Origen o Periodo).';
+        } else {
+            const diffText = [topDiff, secondDiff]
+                .filter(Boolean)
+                .map(d => `${d!.label} (${formatNum(d!.meanA)} vs ${formatNum(d!.meanB)} ${d!.unit})`)
+                .join(' y ');
+
+            mainFinding = `La diferencia más marcada ocurre entre "${gA.groupName}" y "${gB.groupName}", impulsada principalmente por ${diffText || 'su perfil nutricional global'}.`;
+            recommendation = `Usa la tabla de promedios reales debajo del mapa para validar si "${gA.groupName}" o "${gB.groupName}" se ajusta mejor a tus requerimientos de formulación o compra.`;
+        }
+
+        // Estabilidad (consistencia)
+        const groupsWithMultiple = groups.filter(g => g.sampleCount >= 3);
+        if (groupsWithMultiple.length >= 2) {
+            const sortedByStab = [...groupsWithMultiple].sort((a, b) => a.radius - b.radius);
+            const mostStable = sortedByStab[0];
+            const leastStable = sortedByStab[sortedByStab.length - 1];
+            stabilityFinding = `"${mostStable.groupName}" muestra los lotes más uniformes (${mostStable.stabilityLabel}), mientras que "${leastStable.groupName}" presenta la mayor variabilidad entre muestras.`;
+        } else {
+            stabilityFinding = `El grupo con más registros es "${groups[0].groupName}" (${groups[0].sampleCount} muestras, ${groups[0].stabilityLabel}).`;
+        }
+
+        groupInsights.push(mainFinding);
+        if (stabilityFinding) groupInsights.push(stabilityFinding);
     }
 
-    const summary = `El plano factorial (PC1 + PC2) retiene el ${totalVarianceExplained2D}% de la información contenida en las ${P} variables de ${N} muestras analizadas. Permite visualizar correlaciones entre nutrientes y diferencias de composición sin pérdida sustancial de precisión.`;
+    // Relación entre nutrientes más fuerte en español simple
+    const strongestCorr = topCorrelations[0];
+    let nutrientFinding = 'No se detectan correlaciones lineales fuertes entre los parámetros seleccionados.';
+    if (strongestCorr && Math.abs(strongestCorr.correlation) >= 0.35) {
+        const isPos = strongestCorr.correlation > 0;
+        const strengthWord = Math.abs(strongestCorr.correlation) >= 0.65 ? 'fuerte' : 'moderada';
+        nutrientFinding = isPos
+            ? `Relación directa ${strengthWord}: cuando sube ${strongestCorr.var1Label}, también tiende a subir ${strongestCorr.var2Label} (r = +${strongestCorr.correlation.toFixed(2)}).`
+            : `Relación inversa ${strengthWord}: cuando sube ${strongestCorr.var1Label}, suele bajar ${strongestCorr.var2Label} (r = ${strongestCorr.correlation.toFixed(2)}).`;
+    }
+
+    // Interpretación técnica clásica (conservada para la pestaña estadística)
+    const pc1Pos = loadings.filter(l => l.pc1Loading >= 0.4).sort((a, b) => b.pc1Loading - a.pc1Loading).map(l => `${l.label} (+${l.pc1Loading})`);
+    const pc1Neg = loadings.filter(l => l.pc1Loading <= -0.4).sort((a, b) => a.pc1Loading - b.pc1Loading).map(l => `${l.label} (${l.pc1Loading})`);
+    const pc2Pos = loadings.filter(l => l.pc2Loading >= 0.35).sort((a, b) => b.pc2Loading - a.pc2Loading).map(l => `${l.label} (+${l.pc2Loading})`);
+    const pc2Neg = loadings.filter(l => l.pc2Loading <= -0.35).sort((a, b) => a.pc2Loading - b.pc2Loading).map(l => `${l.label} (${l.pc2Loading})`);
+
+    const strongestRelations = topCorrelations.slice(0, 4).map(c => {
+        const type = c.correlation > 0 ? 'positiva directa' : 'inversa';
+        const strength = Math.abs(c.correlation) > 0.7 ? 'muy fuerte' : Math.abs(c.correlation) > 0.4 ? 'moderada' : 'débil';
+        return `${c.var1Label} y ${c.var2Label} tienen correlación ${strength} ${type} (r = ${c.correlation.toFixed(2)}).`;
+    });
+
+    const summary = `El mapa 2D conserva el ${totalVarianceExplained2D}% de la información de ${P} parámetros en ${N} muestras.`;
 
     return {
         isValid: true,
@@ -640,6 +909,16 @@ export function calculatePca(
         topCorrelations,
         groups,
         groupField,
+        suggestedCutoffIso,
+        axisLabels,
+        decisionSummary: {
+            separationLevel,
+            separationTitle,
+            mainFinding,
+            stabilityFinding,
+            nutrientFinding,
+            recommendation
+        },
         interpretation: {
             summary,
             pc1Drivers: { positive: pc1Pos, negative: pc1Neg },
